@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useStore } from '@/lib/store';
+import { isWebGLAvailable } from '@/lib/webgl';
 import { LockScreen } from '@/components/LockScreen';
 import { Navbar } from '@/components/Navbar';
 import { NetWorthSummary } from '@/components/dashboard/NetWorthSummary';
@@ -16,6 +17,12 @@ export default function Home() {
   const { isVaultReady, isLocked, settings } = useStore();
   const [activeTab, setActiveTab] = useState<'dashboard' | 'expenses' | 'funds' | 'portfolio'>('dashboard');
   const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
+  const [isWebGLSupported, setIsWebGLSupported] = useState<boolean>(true);
+
+  // Check hardware/browser WebGL capability on mount
+  useEffect(() => {
+    setIsWebGLSupported(isWebGLAvailable());
+  }, []);
 
   // Selected drill-down states from 3D/2D clicks
   const [drillCategory, setDrillCategory] = useState<string | null>(null);
@@ -69,11 +76,12 @@ export default function Home() {
         {/* Tab 1: Dashboard (Unified 3D Scene or 2D Recharts) */}
         {activeTab === 'dashboard' && (
           <div className="space-y-6">
-            {!settings.prefer2D ? (
+            {isWebGLSupported && !settings.prefer2D ? (
               <FinanceScene
                 onSelectCategory={handleSelectCategory}
                 onSelectFund={handleSelectFund}
                 onSelectHolding={handleSelectHolding}
+                onWebGLFailed={() => setIsWebGLSupported(false)}
               />
             ) : (
               <Dashboard2D

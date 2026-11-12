@@ -249,13 +249,23 @@ export function FinanceScene({
   onSelectCategory,
   onSelectFund,
   onSelectHolding,
+  onWebGLFailed,
 }: {
   onSelectCategory: (cat: string) => void;
   onSelectFund: (fundId: string) => void;
   onSelectHolding: (ticker: string) => void;
+  onWebGLFailed?: () => void;
 }) {
   const { totalNetWorthCents, funds, expenses, holdings, quotes, settings } = useStore();
   const [selectedInfo, setSelectedInfo] = useState<string | null>(null);
+
+  const isReducedMotion = useMemo(() => {
+    if (settings.useReducedMotion) return true;
+    if (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      return true;
+    }
+    return false;
+  }, [settings.useReducedMotion]);
 
   // Category aggregates for Skyline
   const categorySpendMap = useMemo(() => {
@@ -304,7 +314,7 @@ export function FinanceScene({
         {/* Central Net Worth Core */}
         <NetWorthCore
           totalNetWorthCents={totalNetWorthCents}
-          reducedMotion={settings.useReducedMotion}
+          reducedMotion={isReducedMotion}
         />
 
         {/* Orbiting Sinking Funds */}
@@ -320,7 +330,7 @@ export function FinanceScene({
               savedDollars={fund.currentAmountCents / 100}
               targetDollars={fund.targetAmountCents / 100}
               currency={fund.currency}
-              reducedMotion={settings.useReducedMotion}
+              reducedMotion={isReducedMotion}
               onClick={() => {
                 setSelectedInfo(`Fund: ${fund.name} — $${(fund.currentAmountCents / 100).toFixed(0)} of $${(fund.targetAmountCents / 100).toFixed(0)} (${(ratio * 100).toFixed(0)}%)`);
                 onSelectFund(fund.id);
@@ -388,7 +398,7 @@ export function FinanceScene({
           dampingFactor={0.05}
           minDistance={3.5}
           maxDistance={18}
-          autoRotate={!settings.useReducedMotion}
+          autoRotate={!isReducedMotion}
           autoRotateSpeed={0.4}
         />
       </Canvas>
