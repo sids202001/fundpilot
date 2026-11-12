@@ -1,0 +1,21 @@
+{
+  "name": "FundPilot — 3D Local-First Personal Finance",
+  "short_name": "FundPilot",
+  "description": "3D, local-first, encrypted all-in-one personal finance tracker",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#090d16",
+  "theme_color": "#0d9488",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
