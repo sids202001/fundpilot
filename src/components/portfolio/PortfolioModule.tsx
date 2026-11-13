@@ -4,7 +4,6 @@ import React, { useState, useMemo } from 'react';
 import { useStore } from '@/lib/store';
 import { Holding, CorporateAction } from '@/lib/types';
 import { TICKER_REGISTRY, getTickerConfig } from '@/lib/tickerRegistry';
-import { computeFundamentalDCF, DCFResult } from '@/lib/dcf';
 import { parseBrokerCSV, BrokerCSVResult } from '@/lib/csvParsers';
 import {
   TrendingUp,
@@ -36,7 +35,7 @@ export function PortfolioModule({ selectedTicker }: { selectedTicker?: string | 
     updateSettings,
   } = useStore();
 
-  const [activeTab, setActiveTab] = useState<'holdings' | 'dcf' | 'risk' | 'calendar' | 'goals'>('holdings');
+  const [activeTab, setActiveTab] = useState<'holdings' | 'risk' | 'calendar' | 'goals'>('holdings');
 
   // Modals
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
@@ -51,7 +50,7 @@ export function PortfolioModule({ selectedTicker }: { selectedTicker?: string | 
   const [formDate, setFormDate] = useState(new Date().toISOString().split('T')[0]);
 
   // Split Form
-  const [splitTicker, setSplitTicker] = useState('SNDK');
+  const [splitTicker, setSplitTicker] = useState('XYZ');
   const [splitRatio, setSplitRatio] = useState('8');
 
   // Dividend Form
@@ -196,7 +195,7 @@ export function PortfolioModule({ selectedTicker }: { selectedTicker?: string | 
     setIsManualModalOpen(false);
   };
 
-  // Stock Split Handler (HARD REQUIREMENT - SNDK 8:1 Split)
+  // Stock Split Handler (XYZ 8:1 Split)
   const handleApplySplit = async (e: React.FormEvent) => {
     e.preventDefault();
     const ratio = parseFloat(splitRatio);
@@ -206,11 +205,11 @@ export function PortfolioModule({ selectedTicker }: { selectedTicker?: string | 
     setIsSplitModalOpen(false);
   };
 
-  // Dedicated SNDK 8-for-1 acceptance drill trigger
-  const runSndkAcceptanceDrill = async () => {
+  // Dedicated XYZ 8-for-1 acceptance drill trigger
+  const runXyzAcceptanceDrill = async () => {
     // 1. Add 1 share bought at $1,150.89 pre-split
     await addHolding({
-      ticker: 'SNDK',
+      ticker: 'XYZ',
       assetType: 'equity',
       shares: 1,
       costPerShareCents: 115089, // $1,150.89
@@ -218,8 +217,8 @@ export function PortfolioModule({ selectedTicker }: { selectedTicker?: string | 
     });
     // 2. Apply 8-for-1 split
     setTimeout(async () => {
-      await applyCorporateSplit('SNDK', 8);
-      alert('SNDK 8-for-1 Split Applied! Verifying: Exact 8 shares @ $143.86 cost basis, total cost $1,150.89 invariant.');
+      await applyCorporateSplit('XYZ', 8);
+      alert('XYZ 8-for-1 Split Applied! Verifying: Exact 8 shares @ $143.86 cost basis, total cost $1,150.89 invariant.');
     }, 100);
   };
 
@@ -276,7 +275,7 @@ export function PortfolioModule({ selectedTicker }: { selectedTicker?: string | 
         <div>
           <h2 className="text-xl font-bold tracking-tight text-white">Portfolio Manager</h2>
           <p className="text-xs text-slate-400">
-            Real stock & crypto assets. Tax lots, corporate split actions, DCF fair values & dividend schedules.
+            Real stock & crypto assets. Tax lots, corporate split actions & dividend schedules.
           </p>
         </div>
 
@@ -317,14 +316,14 @@ export function PortfolioModule({ selectedTicker }: { selectedTicker?: string | 
         <div className="flex items-center gap-2 text-xs text-teal-200">
           <ShieldCheck className="h-4 w-4 text-teal-400 shrink-0" />
           <span>
-            <strong>Acceptance Test 1 Ready:</strong> SNDK 8-for-1 Split Test. Invariance check ensures total cost stays $1,150.89 across 8 shares @ $143.86.
+            <strong>Acceptance Test 1 Ready:</strong> XYZ 8-for-1 Split Test. Invariance check ensures total cost stays $1,150.89 across 8 shares @ $143.86.
           </span>
         </div>
         <button
-          onClick={runSndkAcceptanceDrill}
+          onClick={runXyzAcceptanceDrill}
           className="rounded-lg bg-teal-500 px-3 py-1 text-[11px] font-bold text-slate-950 hover:bg-teal-400"
         >
-          Run SNDK 8:1 Drill
+          Run XYZ 8:1 Drill
         </button>
       </div>
 
@@ -371,15 +370,6 @@ export function PortfolioModule({ selectedTicker }: { selectedTicker?: string | 
           }`}
         >
           Holdings ({holdings.length})
-        </button>
-        <button
-          onClick={() => setActiveTab('dcf')}
-          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
-            activeTab === 'dcf' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          <Sparkles className="h-3.5 w-3.5 text-teal-400" />
-          <span>Fundamental DCF Valuations</span>
         </button>
         <button
           onClick={() => setActiveTab('risk')}
@@ -487,112 +477,7 @@ export function PortfolioModule({ selectedTicker }: { selectedTicker?: string | 
         </div>
       )}
 
-      {/* VIEW 2: Reused Fundamental DCF Valuation */}
-      {activeTab === 'dcf' && (
-        <div className="space-y-4">
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 backdrop-blur-md">
-            <h3 className="text-sm font-semibold text-white">Authoritative Fundamental DCF Engine</h3>
-            <p className="text-xs text-slate-400">
-              Rule 1: Valuation is NEVER derived from spot price. Reuses exact fundamental inputs from your stock analyzer.
-              Crypto assets show N/A by design. Circuit-breaker triggers if bear case &gt; 50% above spot.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            {holdings.map((h) => {
-              const spot = quotes[h.ticker]?.price || 0;
-              const dcf = computeFundamentalDCF(h.ticker, spot);
-
-              return (
-                <div
-                  key={h.ticker}
-                  className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5 shadow-lg backdrop-blur-md"
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="text-base font-bold text-white">{h.ticker}</span>
-                      <span className="ml-2 text-xs text-slate-400">
-                        Spot: ${spot > 0 ? spot.toFixed(2) : 'N/A'}
-                      </span>
-                    </div>
-
-                    {dcf.isApplicable ? (
-                      <span className="rounded bg-teal-500/10 px-2 py-0.5 text-xs font-semibold text-teal-300 border border-teal-500/20">
-                        Fair Value: {dcf.baseFairValueStr}
-                      </span>
-                    ) : (
-                      <span className="rounded bg-slate-800 px-2 py-0.5 text-xs text-slate-400">
-                        {dcf.baseFairValueStr}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Circuit breaker warning if tripped */}
-                  {dcf.circuitBreakerTripped && (
-                    <div className="mt-3 flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-300">
-                      <AlertTriangle className="h-4 w-4 shrink-0" />
-                      <span>{dcf.circuitBreakerReason}</span>
-                    </div>
-                  )}
-
-                  {/* Not applicable reason for Crypto */}
-                  {!dcf.isApplicable && (
-                    <div className="mt-3 rounded-xl border border-slate-800 bg-slate-950/60 p-3 text-xs text-slate-400">
-                      {dcf.notApplicableReason}
-                    </div>
-                  )}
-
-                  {/* Scenarios Table */}
-                  {dcf.isApplicable && dcf.scenarios && (
-                    <div className="mt-4 space-y-2">
-                      <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                        {/* Bear Case */}
-                        <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-2.5">
-                          <span className="text-[10px] text-slate-400 uppercase font-semibold">Bear Case</span>
-                          <div className="mt-1 font-bold text-slate-200">
-                            {dcf.scenarios.bear.fairValueStr}
-                          </div>
-                          <span className="text-[11px] text-slate-400">
-                            {dcf.scenarios.bear.impliedReturnStr}
-                          </span>
-                        </div>
-
-                        {/* Base Case */}
-                        <div className="rounded-xl border border-teal-500/30 bg-teal-500/10 p-2.5">
-                          <span className="text-[10px] text-teal-400 uppercase font-semibold">Base Case</span>
-                          <div className="mt-1 font-bold text-teal-300">
-                            {dcf.scenarios.base.fairValueStr}
-                          </div>
-                          <span className="text-[11px] text-teal-200 font-medium">
-                            {dcf.scenarios.base.impliedReturnStr}
-                          </span>
-                        </div>
-
-                        {/* Bull Case */}
-                        <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-2.5">
-                          <span className="text-[10px] text-slate-400 uppercase font-semibold">Bull Case</span>
-                          <div className="mt-1 font-bold text-slate-200">
-                            {dcf.scenarios.bull.fairValueStr}
-                          </div>
-                          <span className="text-[11px] text-slate-400">
-                            {dcf.scenarios.bull.impliedReturnStr}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="mt-2 text-[10px] text-slate-500 font-mono">
-                        {dcf.inputsDisplay}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* VIEW 3: AI Risk Readout & Rebalancing Suggestions */}
+      {/* VIEW 2: AI Risk Readout & Rebalancing Suggestions */}
       {activeTab === 'risk' && (
         <div className="space-y-6">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -786,7 +671,7 @@ export function PortfolioModule({ selectedTicker }: { selectedTicker?: string | 
                 <input
                   type="text"
                   required
-                  placeholder="e.g. NVDA, MSFT, AMD, SNDK, SOL, BTC"
+                  placeholder="e.g. NVDA, MSFT, AMD, XYZ, SOL, BTC"
                   value={formTicker}
                   onChange={(e) => setFormTicker(e.target.value.toUpperCase())}
                   className="mt-1 w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-white focus:border-teal-500 focus:outline-none"

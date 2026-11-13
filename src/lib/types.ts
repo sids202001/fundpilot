@@ -3,6 +3,7 @@
 // Floating point numbers are NEVER used for monetary values.
 
 export type TransactionSource = 'manual' | 'voice' | 'receipt' | 'csv';
+export type AccountBucket = 'bank' | 'credit' | 'cash';
 
 export interface Expense {
   id: string;
@@ -11,6 +12,8 @@ export interface Expense {
   category: string;
   date: string; // YYYY-MM-DD
   source: TransactionSource;
+  accountType?: AccountBucket; // 'bank' | 'credit' | 'cash'
+  entryType?: 'debit' | 'credit'; // 'debit' = money out, 'credit' = money in
   confidence: number; // 0.0 - 1.0 (e.g. 0.95 = 95%)
   notes?: string;
   isSubscription?: boolean;
@@ -110,8 +113,9 @@ export interface FxRateData {
 
 export interface UserSettings {
   bankCashCents: number;
-  monthlyIncomeCents: number;
-  fixedBillsCents: number;
+  creditCardOwedCents: number; // Credit card balance owed (liability subtracted from net worth)
+  monthlyIncomeCents: number; // Money in
+  fixedBillsCents: number; // Money out
   portfolioTargetValueCents?: number;
   portfolioTargetDate?: string;
   autoLockMinutes: number;

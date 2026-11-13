@@ -31,6 +31,7 @@ const BASELINE_PRICES: Record<string, number> = {
   INTC: 24.50,
   TEM: 68.20,
   SOFI: 14.80,
+  XYZ: 143.86,
   SOL: 215.00,
   BTC: 88500.00,
 };

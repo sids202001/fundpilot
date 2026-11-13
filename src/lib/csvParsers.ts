@@ -136,6 +136,12 @@ export function parseBankCSV(csvText: string, userRules: CategoryRule[] = []): B
     // Categorize
     const catResult = categorizeMerchant(rawDesc, userRules);
 
+    const isCreditCard = format === 'American Express';
+    const entryType: 'debit' | 'credit' = isCreditCard
+      ? (parsedNum > 0 ? 'debit' : 'credit')
+      : (parsedNum < 0 ? 'debit' : 'credit');
+    const accountType: 'bank' | 'credit' | 'cash' = isCreditCard ? 'credit' : 'bank';
+
     expenses.push({
       amountCents: absCents,
       merchant: rawDesc,
@@ -143,6 +149,8 @@ export function parseBankCSV(csvText: string, userRules: CategoryRule[] = []): B
       date: dateStr,
       source: 'csv',
       confidence: catResult.confidence,
+      accountType,
+      entryType,
     });
   }
 

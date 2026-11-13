@@ -5,7 +5,6 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Text, Float } from '@react-three/drei';
 import * as THREE from 'three';
 import { useStore } from '@/lib/store';
-import { computeFundamentalDCF } from '@/lib/dcf';
 
 // Center Net Worth Core
 function NetWorthCore({ totalNetWorthCents, reducedMotion }: { totalNetWorthCents: number; reducedMotion: boolean }) {
@@ -192,19 +191,20 @@ function PortfolioBlock({
   ticker,
   marketValueDollars,
   gainLossPct,
-  dcfGapPct,
   onClick,
 }: {
   position: [number, number, number];
   ticker: string;
   marketValueDollars: number;
   gainLossPct: number;
-  dcfGapPct: number | null;
   onClick: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
+  // Block size = position value
   const size = Math.max(0.5, Math.min(1.4, Math.sqrt(marketValueDollars / 2000) * 0.7));
-  const height = dcfGapPct !== null ? Math.max(0.2, Math.min(1.8, (dcfGapPct + 50) / 60)) : 0.4;
+  // Block height = magnitude of unrealized P&L %
+  const pnlMagnitude = Math.abs(gainLossPct);
+  const height = Math.max(0.25, Math.min(2.2, 0.35 + (pnlMagnitude / 25) * 1.0));
 
   const isGain = gainLossPct >= 0;
   const color = isGain ? (hovered ? '#4ade80' : '#10b981') : hovered ? '#f87171' : '#ef4444';
@@ -256,7 +256,7 @@ export function FinanceScene({
   onSelectHolding: (ticker: string) => void;
   onWebGLFailed?: () => void;
 }) {
-  const { totalNetWorthCents, funds, expenses, holdings, quotes, settings } = useStore();
+  const { totalNetWorthCents, totalFundsCents, totalPortfolioCents, funds, expenses, holdings, quotes, settings } = useStore();
   const [selectedInfo, setSelectedInfo] = useState<string | null>(null);
 
   const isReducedMotion = useMemo(() => {
@@ -287,9 +287,18 @@ export function FinanceScene({
     <div className="relative h-[540px] w-full overflow-hidden rounded-2xl border border-slate-800 bg-slate-950 shadow-2xl">
       {/* 3D Scene Controls HUD */}
       <div className="pointer-events-none absolute left-4 top-4 z-10 flex flex-col gap-1">
-        <div className="rounded-lg border border-slate-800/80 bg-slate-900/80 px-3 py-1.5 backdrop-blur-md">
+        <div className="rounded-xl border border-slate-800/80 bg-slate-900/90 px-3.5 py-2 backdrop-blur-md shadow-lg">
           <span className="text-xs font-semibold text-teal-400">FundPilot 3D Command Deck</span>
-          <p className="text-[10px] text-slate-400">Orbit • Zoom • Click objects to inspect</p>
+          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-slate-300">
+            <span>Cash: ${(settings.bankCashCents / 100).toLocaleString('en-US', { minimumFractionDigits: 0 })}</span>
+            <span>•</span>
+            <span>Funds: ${(totalFundsCents / 100).toLocaleString('en-US', { minimumFractionDigits: 0 })}</span>
+            <span>•</span>
+            <span>Port: ${(totalPortfolioCents / 100).toLocaleString('en-US', { minimumFractionDigits: 0 })}</span>
+            <span>•</span>
+            <span className="text-rose-400">Credit: -${(settings.creditCardOwedCents / 100).toLocaleString('en-US', { minimumFractionDigits: 0 })}</span>
+          </div>
+          <p className="mt-0.5 text-[9px] text-slate-400">Net Worth: ${(totalNetWorthCents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })} (Cash + Funds + Port − Credit)</p>
         </div>
       </div>
 
@@ -365,9 +374,6 @@ export function FinanceScene({
           const costVal = h.totalCostCents / 100;
           const gainLossPct = costVal > 0 ? ((mktVal - costVal) / costVal) * 100 : 0;
 
-          const dcf = computeFundamentalDCF(h.ticker, quote);
-          const dcfGapPct = dcf.baseFairValue && quote > 0 ? ((dcf.baseFairValue - quote) / quote) * 100 : null;
-
           const row = Math.floor(idx / 3);
           const col = idx % 3;
           const xPos = 3.0 + col * 0.85;
@@ -380,9 +386,8 @@ export function FinanceScene({
               ticker={h.ticker}
               marketValueDollars={mktVal}
               gainLossPct={gainLossPct}
-              dcfGapPct={dcfGapPct}
               onClick={() => {
-                setSelectedInfo(`Holding: ${h.ticker} — Value: $${mktVal.toFixed(2)} (${gainLossPct >= 0 ? '+' : ''}${gainLossPct.toFixed(1)}%) | DCF Gap: ${dcfGapPct !== null ? `${dcfGapPct.toFixed(1)}%` : 'N/A'}`);
+                setSelectedInfo(`Holding: ${h.ticker} — Value: $${mktVal.toFixed(2)} (${gainLossPct >= 0 ? '+' : ''}${gainLossPct.toFixed(1)}% P&L)`);
                 onSelectHolding(h.ticker);
               }}
             />

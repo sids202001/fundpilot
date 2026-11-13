@@ -339,7 +339,7 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Emergency Fund, SNDK Investment Fund, Vacation"
+                  placeholder="e.g. Emergency Fund, House Fund, Vacation"
                   value={fundName}
                   onChange={(e) => setFundName(e.target.value)}
                   className="mt-1 w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-white focus:border-teal-500 focus:outline-none"

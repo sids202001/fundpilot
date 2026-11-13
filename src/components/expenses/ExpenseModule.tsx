@@ -42,6 +42,7 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
   const [activeSubTab, setActiveSubTab] = useState<'list' | 'subscriptions' | 'budgets' | 'rules'>('list');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>(filterCategory || 'ALL');
+  const [selectedAccountFilter, setSelectedAccountFilter] = useState<'ALL' | 'bank' | 'credit' | 'cash'>('ALL');
 
   // Modals
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
@@ -56,6 +57,8 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
   const [manualCategory, setManualCategory] = useState('Groceries');
   const [manualDate, setManualDate] = useState(new Date().toISOString().split('T')[0]);
   const [manualNotes, setManualNotes] = useState('');
+  const [manualAccountType, setManualAccountType] = useState<'bank' | 'credit' | 'cash'>('bank');
+  const [manualEntryType, setManualEntryType] = useState<'debit' | 'credit'>('debit');
 
   // Voice State
   const [voiceTranscript, setVoiceTranscript] = useState('');
@@ -100,9 +103,23 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
         (e.notes && e.notes.toLowerCase().includes(searchQuery.toLowerCase()));
       const matchCategory =
         selectedCategoryFilter === 'ALL' || e.category === selectedCategoryFilter;
-      return matchSearch && matchCategory;
+      const matchAccount =
+        selectedAccountFilter === 'ALL' || (e.accountType || 'bank') === selectedAccountFilter;
+      return matchSearch && matchCategory && matchAccount;
     });
-  }, [expenses, searchQuery, selectedCategoryFilter]);
+  }, [expenses, searchQuery, selectedCategoryFilter, selectedAccountFilter]);
+
+  const totalMoneyOutCents = useMemo(() => {
+    return displayedExpenses
+      .filter((e) => (e.entryType || 'debit') === 'debit')
+      .reduce((sum, e) => sum + e.amountCents, 0);
+  }, [displayedExpenses]);
+
+  const totalMoneyInCents = useMemo(() => {
+    return displayedExpenses
+      .filter((e) => e.entryType === 'credit')
+      .reduce((sum, e) => sum + e.amountCents, 0);
+  }, [displayedExpenses]);
 
   // Manual Add Handler
   const handleManualAdd = async (e: React.FormEvent) => {
@@ -121,6 +138,8 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
       source: 'manual',
       confidence: cat.confidence,
       notes: manualNotes.trim() || undefined,
+      accountType: manualAccountType,
+      entryType: manualEntryType,
     });
 
     setManualMerchant('');
@@ -176,6 +195,8 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
       source: 'voice',
       confidence: voiceParsed.confidence,
       notes: `Voice input: "${voiceParsed.transcript}"`,
+      accountType: 'bank',
+      entryType: 'debit',
     });
     setVoiceTranscript('');
     setVoiceParsed(null);
@@ -212,6 +233,8 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
       source: 'receipt',
       confidence: parsedReceipt.confidence,
       notes: `Receipt OCR: ${parsedReceipt.items.length} items parsed. Subtotal $${(parsedReceipt.subtotalCents / 100).toFixed(2)}, Tax $${(parsedReceipt.taxCents / 100).toFixed(2)}`,
+      accountType: 'bank',
+      entryType: 'debit',
     });
     setParsedReceipt(null);
     setReceiptTextPasted('');
@@ -360,6 +383,45 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
       {/* VIEW 1: Expenses List */}
       {activeSubTab === 'list' && (
         <div className="space-y-4">
+          {/* Account Bucket Selector & Cash Flow Breakdown */}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="flex items-center gap-1 rounded-xl border border-slate-800 bg-slate-900/60 p-1">
+              {(['ALL', 'bank', 'credit', 'cash'] as const).map((acc) => (
+                <button
+                  key={acc}
+                  onClick={() => setSelectedAccountFilter(acc)}
+                  className={`flex-1 rounded-lg py-1.5 text-center text-xs font-medium transition-all ${
+                    selectedAccountFilter === acc
+                      ? 'bg-slate-800 text-teal-400 font-semibold shadow'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  {acc === 'ALL' ? 'All Accounts' : acc === 'bank' ? 'Bank' : acc === 'credit' ? 'Credit Card' : 'Cash'}
+                </button>
+              ))}
+            </div>
+
+            <div className="rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-2 flex items-center justify-between">
+              <div>
+                <span className="text-[10px] uppercase font-semibold text-slate-400">Money Out (Debits)</span>
+                <div className="text-base font-bold text-white">
+                  -${(totalMoneyOutCents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+              </div>
+              <div className="text-[10px] text-slate-500">Expenses & Bills</div>
+            </div>
+
+            <div className="rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-2 flex items-center justify-between">
+              <div>
+                <span className="text-[10px] uppercase font-semibold text-slate-400">Money In (Credits)</span>
+                <div className="text-base font-bold text-emerald-400">
+                  +${(totalMoneyInCents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+              </div>
+              <div className="text-[10px] text-slate-500">Refunds & Inflow</div>
+            </div>
+          </div>
+
           {/* Filters Bar */}
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="relative flex-1">
@@ -393,6 +455,8 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
               <div className="divide-y divide-slate-800/80">
                 {displayedExpenses.map((exp) => {
                   const confPct = Math.round(exp.confidence * 100);
+                  const isCredit = exp.entryType === 'credit';
+                  const acc = exp.accountType || 'bank';
                   return (
                     <div
                       key={exp.id}
@@ -408,6 +472,15 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
                         <div>
                           <div className="flex items-center gap-2">
                             <span className="font-semibold text-white">{exp.merchant}</span>
+                            <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${
+                              acc === 'credit'
+                                ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                                : acc === 'cash'
+                                ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                                : 'bg-sky-500/10 text-sky-400 border border-sky-500/20'
+                            }`}>
+                              {acc}
+                            </span>
                             {exp.isSubscription && (
                               <span className="rounded bg-teal-500/10 px-1.5 py-0.5 text-[10px] font-medium text-teal-300 border border-teal-500/20">
                                 Subscription
@@ -443,8 +516,11 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
                       </div>
 
                       <div className="text-right">
-                        <div className="text-base font-bold text-white">
-                          -${(exp.amountCents / 100).toFixed(2)}
+                        <div className={`text-base font-bold ${isCredit ? 'text-emerald-400' : 'text-white'}`}>
+                          {isCredit ? '+' : '-'}${(exp.amountCents / 100).toFixed(2)}
+                        </div>
+                        <div className="text-[10px] text-slate-500 capitalize">
+                          {isCredit ? 'Money In' : 'Money Out'}
                         </div>
                       </div>
                     </div>
@@ -691,6 +767,31 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
                     onChange={(e) => setManualDate(e.target.value)}
                     className="mt-1 w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-white focus:border-teal-500 focus:outline-none"
                   />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-slate-400">Account Bucket</label>
+                  <select
+                    value={manualAccountType}
+                    onChange={(e) => setManualAccountType(e.target.value as any)}
+                    className="mt-1 w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-white focus:border-teal-500 focus:outline-none"
+                  >
+                    <option value="bank">Bank / Debit</option>
+                    <option value="credit">Credit Card</option>
+                    <option value="cash">Cash</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400">Direction</label>
+                  <select
+                    value={manualEntryType}
+                    onChange={(e) => setManualEntryType(e.target.value as any)}
+                    className="mt-1 w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-white focus:border-teal-500 focus:outline-none"
+                  >
+                    <option value="debit">Money Out (Debit)</option>
+                    <option value="credit">Money In (Credit / Refund)</option>
+                  </select>
                 </div>
               </div>
               <div>

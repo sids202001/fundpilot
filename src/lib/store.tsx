@@ -79,11 +79,13 @@ interface StoreContextType {
   totalNetWorthCents: number;
   totalFundsCents: number;
   totalPortfolioCents: number;
+  creditCardOwedCents: number;
   safeToSpendMonthCents: number;
 }
 
 const DEFAULT_SETTINGS: UserSettings = {
   bankCashCents: 0,
+  creditCardOwedCents: 0,
   monthlyIncomeCents: 0,
   fixedBillsCents: 0,
   autoLockMinutes: 5,
@@ -399,7 +401,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     // Identify tickers from holdings or default portfolio
     const tickerSet = new Set<string>();
     holdings.forEach((h) => tickerSet.add(h.ticker.toUpperCase()));
-    ['NVDA', 'MSFT', 'AMD', 'SNDK', 'MU', 'AVGO', 'GOOGL', 'ORCL', 'QCOM', 'CRM', 'NOW', 'NFLX', 'META', 'INTC', 'TEM', 'SOFI', 'SOL', 'BTC'].forEach((t) => tickerSet.add(t));
+    ['NVDA', 'MSFT', 'AMD', 'SNDK', 'MU', 'AVGO', 'GOOGL', 'ORCL', 'QCOM', 'CRM', 'NOW', 'NFLX', 'META', 'INTC', 'TEM', 'SOFI', 'XYZ', 'SOL', 'BTC'].forEach((t) => tickerSet.add(t));
 
     const tickerList = Array.from(tickerSet).join(',');
     try {
@@ -605,8 +607,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     refreshQuotes(true);
   };
 
-  // Corporate Actions: Stock Splits (HARD REQUIREMENT - SNDK Split Test)
-  // SNDK split test: 1 share bought at $1,150.89 pre-split.
+  // Corporate Actions: Stock Splits (HARD REQUIREMENT - XYZ Split Test)
+  // XYZ split test: 1 share bought at $1,150.89 pre-split.
   // Apply 8-for-1 split. Result must be exactly 8 shares at $143.86 cost basis, total cost still $1,150.89.
   const applyCorporateSplit = async (ticker: string, splitRatio: number) => {
     if (!cryptoKey || splitRatio <= 0) return;
@@ -787,7 +789,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return sum + h.totalCostCents;
   }, 0);
 
-  const totalNetWorthCents = settings.bankCashCents + totalFundsCents + totalPortfolioCents;
+  // Net worth = bank cash + funds + portfolio − credit card balances owed
+  // All four parts shown separately, summing exactly.
+  const creditCardOwedCents = settings.creditCardOwedCents || 0;
+  const totalNetWorthCents = settings.bankCashCents + totalFundsCents + totalPortfolioCents - creditCardOwedCents;
 
   // Safe to spend this month = income - fixed bills - fund allocations - budget already spent
   const currentMonth = new Date().toISOString().substring(0, 7);
@@ -844,6 +849,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         totalNetWorthCents,
         totalFundsCents,
         totalPortfolioCents,
+        creditCardOwedCents,
         safeToSpendMonthCents,
       }}
     >

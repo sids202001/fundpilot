@@ -61,14 +61,30 @@ export function Dashboard2D({
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
       {/* Net Worth 2D Composition */}
       <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 backdrop-blur-md">
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-3 flex items-center justify-between">
           <div>
             <h3 className="text-sm font-semibold text-white">Net Worth Composition</h3>
-            <p className="text-xs text-slate-400">Total: ${(totalNetWorthCents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+            <p className="text-xs text-slate-400">Total Net Worth: ${(totalNetWorthCents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
           </div>
           <span className="rounded bg-teal-500/10 px-2 py-0.5 text-[11px] font-medium text-teal-300 border border-teal-500/20">
             2D Verified
           </span>
+        </div>
+
+        {/* 4 Buckets Separation Grid */}
+        <div className="grid grid-cols-2 gap-2 text-[11px] mb-3 p-3 rounded-xl bg-slate-950/70 border border-slate-800">
+          <div>
+            <span className="text-slate-400">1. Bank Cash:</span> <span className="font-semibold text-sky-400">${(settings.bankCashCents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+          </div>
+          <div>
+            <span className="text-slate-400">2. Sinking Funds:</span> <span className="font-semibold text-teal-400">${(totalFundsCents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+          </div>
+          <div>
+            <span className="text-slate-400">3. Portfolio Value:</span> <span className="font-semibold text-purple-400">${(totalPortfolioCents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+          </div>
+          <div>
+            <span className="text-slate-400">4. Credit Card Owed:</span> <span className="font-semibold text-rose-400">-${(settings.creditCardOwedCents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+          </div>
         </div>
 
         <div className="h-64 w-full">

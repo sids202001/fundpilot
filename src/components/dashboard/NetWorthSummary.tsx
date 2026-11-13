@@ -9,6 +9,7 @@ export function NetWorthSummary() {
     totalNetWorthCents,
     totalFundsCents,
     totalPortfolioCents,
+    creditCardOwedCents,
     safeToSpendMonthCents,
     settings,
     updateSettings,
@@ -18,6 +19,7 @@ export function NetWorthSummary() {
 
   const [isEditingCash, setIsEditingCash] = useState(false);
   const [bankCashInput, setBankCashInput] = useState((settings.bankCashCents / 100).toString());
+  const [creditOwedInput, setCreditOwedInput] = useState((settings.creditCardOwedCents / 100).toString());
   const [incomeInput, setIncomeInput] = useState((settings.monthlyIncomeCents / 100).toString());
   const [fixedBillsInput, setFixedBillsInput] = useState((settings.fixedBillsCents / 100).toString());
 
@@ -39,11 +41,13 @@ export function NetWorthSummary() {
 
   const handleSaveSettings = () => {
     const cashCents = Math.round(parseFloat(bankCashInput || '0') * 100);
+    const creditCents = Math.round(parseFloat(creditOwedInput || '0') * 100);
     const incCents = Math.round(parseFloat(incomeInput || '0') * 100);
     const billsCents = Math.round(parseFloat(fixedBillsInput || '0') * 100);
 
     updateSettings({
       bankCashCents: isNaN(cashCents) ? 0 : cashCents,
+      creditCardOwedCents: isNaN(creditCents) ? 0 : creditCents,
       monthlyIncomeCents: isNaN(incCents) ? 0 : incCents,
       fixedBillsCents: isNaN(billsCents) ? 0 : billsCents,
     });
@@ -61,6 +65,7 @@ export function NetWorthSummary() {
             <button
               onClick={() => {
                 setBankCashInput((settings.bankCashCents / 100).toString());
+                setCreditOwedInput((settings.creditCardOwedCents / 100).toString());
                 setIncomeInput((settings.monthlyIncomeCents / 100).toString());
                 setFixedBillsInput((settings.fixedBillsCents / 100).toString());
                 setIsEditingCash(!isEditingCash);
@@ -74,12 +79,14 @@ export function NetWorthSummary() {
           <div className="mt-2 text-2xl font-bold tracking-tight text-white">
             ${(totalNetWorthCents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
-          <div className="mt-3 flex items-center gap-1.5 text-[11px] text-slate-400">
+          <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-400">
             <span>Cash: ${(settings.bankCashCents / 100).toLocaleString('en-US', { minimumFractionDigits: 0 })}</span>
             <span>•</span>
             <span>Funds: ${(totalFundsCents / 100).toLocaleString('en-US', { minimumFractionDigits: 0 })}</span>
             <span>•</span>
             <span>Port: ${(totalPortfolioCents / 100).toLocaleString('en-US', { minimumFractionDigits: 0 })}</span>
+            <span>•</span>
+            <span className="text-rose-400">Credit Owed: -${(creditCardOwedCents / 100).toLocaleString('en-US', { minimumFractionDigits: 0 })}</span>
           </div>
           <div className="absolute right-0 top-0 h-1 w-full bg-gradient-to-r from-teal-500 to-emerald-400" />
         </div>
@@ -141,7 +148,7 @@ export function NetWorthSummary() {
         <div className="rounded-xl border border-slate-700 bg-slate-900/95 p-4 shadow-xl">
           <div className="mb-3 flex items-center justify-between">
             <h4 className="text-xs font-semibold uppercase tracking-wider text-teal-400">
-              Adjust Bank Cash & Monthly Income
+              Adjust Bank Cash, Credit Card Debt & Cash Flow
             </h4>
             <button
               onClick={() => setIsEditingCash(false)}
@@ -150,7 +157,7 @@ export function NetWorthSummary() {
               Cancel
             </button>
           </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div>
               <label className="text-[11px] text-slate-400">Liquid Bank Cash ($)</label>
               <input
@@ -159,6 +166,16 @@ export function NetWorthSummary() {
                 value={bankCashInput}
                 onChange={(e) => setBankCashInput(e.target.value)}
                 className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-1.5 text-xs text-white focus:border-teal-500 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="text-[11px] text-slate-400">Credit Card Owed ($)</label>
+              <input
+                type="number"
+                step="any"
+                value={creditOwedInput}
+                onChange={(e) => setCreditOwedInput(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-1.5 text-xs text-rose-300 focus:border-rose-500 focus:outline-none"
               />
             </div>
             <div>

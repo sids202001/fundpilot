@@ -1,5 +1,5 @@
-// Authoritative Ticker Registry & Fundamental Profiles
-// Reuses fundamental configuration from user's stock analyzer
+// Authoritative Ticker Registry & Asset Profiles
+// Maintains metadata for user's equity and crypto assets
 
 export interface TickerConfig {
   ticker: string;
@@ -7,14 +7,9 @@ export interface TickerConfig {
   assetType: 'equity' | 'crypto';
   sector: string;
   sharesOutstanding?: number;
-  isCyclical: boolean;
-  cyclicalNotes?: string;
-  jvCapexObligationUsd?: number;
-  maintenanceCapexRatio?: number;
-  ttmFcfUsd?: number; // In USD
-  netCashUsd?: number; // In USD (Cash - Debt)
-  beta?: number;
-  baseGrowth?: number;
+  dividendPerQuarter?: number;
+  nextExDate?: string;
+  nextPayDate?: string;
 }
 
 export const TICKER_REGISTRY: Record<string, TickerConfig> = {
@@ -24,14 +19,9 @@ export const TICKER_REGISTRY: Record<string, TickerConfig> = {
     assetType: 'equity',
     sector: 'Semiconductors',
     sharesOutstanding: 24_147_000_000,
-    isCyclical: false,
-    cyclicalNotes: 'AI accelerator leader; secular structural demand.',
-    jvCapexObligationUsd: 0,
-    maintenanceCapexRatio: 0.40,
-    ttmFcfUsd: 60_853_000_000,
-    netCashUsd: 26_000_000_000,
-    beta: 1.68,
-    baseGrowth: 0.32,
+    dividendPerQuarter: 0.01,
+    nextExDate: '2026-12-05',
+    nextPayDate: '2026-12-27',
   },
   MSFT: {
     ticker: 'MSFT',
@@ -39,13 +29,9 @@ export const TICKER_REGISTRY: Record<string, TickerConfig> = {
     assetType: 'equity',
     sector: 'Software & Cloud',
     sharesOutstanding: 7_426_194_552,
-    isCyclical: false,
-    jvCapexObligationUsd: 0,
-    maintenanceCapexRatio: 0.45,
-    ttmFcfUsd: 74_071_000_000,
-    netCashUsd: 28_000_000_000,
-    beta: 1.15,
-    baseGrowth: 0.14,
+    dividendPerQuarter: 0.83,
+    nextExDate: '2026-11-20',
+    nextPayDate: '2026-12-10',
   },
   AMD: {
     ticker: 'AMD',
@@ -53,13 +39,6 @@ export const TICKER_REGISTRY: Record<string, TickerConfig> = {
     assetType: 'equity',
     sector: 'Semiconductors',
     sharesOutstanding: 1_632_475_042,
-    isCyclical: false,
-    jvCapexObligationUsd: 0,
-    maintenanceCapexRatio: 0.35,
-    ttmFcfUsd: 3_250_000_000,
-    netCashUsd: 3_800_000_000,
-    beta: 1.65,
-    baseGrowth: 0.18,
   },
   SNDK: {
     ticker: 'SNDK',
@@ -67,14 +46,6 @@ export const TICKER_REGISTRY: Record<string, TickerConfig> = {
     assetType: 'equity',
     sector: 'Memory & Storage',
     sharesOutstanding: 142_289_365,
-    isCyclical: true,
-    cyclicalNotes: 'NAND flash and SSD storage provider; mid-cycle normalization applied.',
-    jvCapexObligationUsd: 1_150_000_000, // ~50% Flash Ventures (Kioxia fab) JV capex obligation
-    maintenanceCapexRatio: 0.60,
-    ttmFcfUsd: 1_280_000_000,
-    netCashUsd: -450_000_000,
-    beta: 1.45,
-    baseGrowth: 0.06,
   },
   MU: {
     ticker: 'MU',
@@ -82,14 +53,6 @@ export const TICKER_REGISTRY: Record<string, TickerConfig> = {
     assetType: 'equity',
     sector: 'Semiconductors',
     sharesOutstanding: 1_131_423_212,
-    isCyclical: true,
-    cyclicalNotes: 'DRAM/NAND cyclical; mid-cycle normalization applied.',
-    jvCapexObligationUsd: 0,
-    maintenanceCapexRatio: 0.65,
-    ttmFcfUsd: 3_860_000_000,
-    netCashUsd: -2_100_000_000,
-    beta: 1.30,
-    baseGrowth: 0.07,
   },
   AVGO: {
     ticker: 'AVGO',
@@ -97,13 +60,6 @@ export const TICKER_REGISTRY: Record<string, TickerConfig> = {
     assetType: 'equity',
     sector: 'Semiconductors & Software',
     sharesOutstanding: 4_773_629_865,
-    isCyclical: false,
-    jvCapexObligationUsd: 0,
-    maintenanceCapexRatio: 0.35,
-    ttmFcfUsd: 21_900_000_000,
-    netCashUsd: -62_000_000_000,
-    beta: 1.25,
-    baseGrowth: 0.16,
   },
   GOOGL: {
     ticker: 'GOOGL',
@@ -111,13 +67,6 @@ export const TICKER_REGISTRY: Record<string, TickerConfig> = {
     assetType: 'equity',
     sector: 'Interactive Media & Cloud',
     sharesOutstanding: 12_293_000_000,
-    isCyclical: false,
-    jvCapexObligationUsd: 0,
-    maintenanceCapexRatio: 0.45,
-    ttmFcfUsd: 71_200_000_000,
-    netCashUsd: 82_000_000_000,
-    beta: 1.05,
-    baseGrowth: 0.12,
   },
   GOOG: {
     ticker: 'GOOG',
@@ -125,13 +74,6 @@ export const TICKER_REGISTRY: Record<string, TickerConfig> = {
     assetType: 'equity',
     sector: 'Interactive Media & Cloud',
     sharesOutstanding: 12_293_000_000,
-    isCyclical: false,
-    jvCapexObligationUsd: 0,
-    maintenanceCapexRatio: 0.45,
-    ttmFcfUsd: 71_200_000_000,
-    netCashUsd: 82_000_000_000,
-    beta: 1.05,
-    baseGrowth: 0.12,
   },
   ORCL: {
     ticker: 'ORCL',
@@ -139,13 +81,6 @@ export const TICKER_REGISTRY: Record<string, TickerConfig> = {
     assetType: 'equity',
     sector: 'Enterprise Software & Cloud',
     sharesOutstanding: 3_031_501_149,
-    isCyclical: false,
-    jvCapexObligationUsd: 0,
-    maintenanceCapexRatio: 0.50,
-    ttmFcfUsd: 11_800_000_000,
-    netCashUsd: -76_000_000_000,
-    beta: 1.20,
-    baseGrowth: 0.11,
   },
   QCOM: {
     ticker: 'QCOM',
@@ -153,13 +88,6 @@ export const TICKER_REGISTRY: Record<string, TickerConfig> = {
     assetType: 'equity',
     sector: 'Semiconductors',
     sharesOutstanding: 1_067_839_507,
-    isCyclical: true,
-    jvCapexObligationUsd: 0,
-    maintenanceCapexRatio: 0.40,
-    ttmFcfUsd: 11_200_000_000,
-    netCashUsd: -2_500_000_000,
-    beta: 1.25,
-    baseGrowth: 0.08,
   },
   CRM: {
     ticker: 'CRM',
@@ -167,13 +95,6 @@ export const TICKER_REGISTRY: Record<string, TickerConfig> = {
     assetType: 'equity',
     sector: 'Cloud CRM',
     sharesOutstanding: 823_000_000,
-    isCyclical: false,
-    jvCapexObligationUsd: 0,
-    maintenanceCapexRatio: 0.30,
-    ttmFcfUsd: 12_400_000_000,
-    netCashUsd: 4_500_000_000,
-    beta: 1.18,
-    baseGrowth: 0.10,
   },
   NOW: {
     ticker: 'NOW',
@@ -181,13 +102,6 @@ export const TICKER_REGISTRY: Record<string, TickerConfig> = {
     assetType: 'equity',
     sector: 'Enterprise Software',
     sharesOutstanding: 1_037_917_000,
-    isCyclical: false,
-    jvCapexObligationUsd: 0,
-    maintenanceCapexRatio: 0.30,
-    ttmFcfUsd: 3_900_000_000,
-    netCashUsd: 4_200_000_000,
-    beta: 1.10,
-    baseGrowth: 0.20,
   },
   NFLX: {
     ticker: 'NFLX',
@@ -195,13 +109,6 @@ export const TICKER_REGISTRY: Record<string, TickerConfig> = {
     assetType: 'equity',
     sector: 'Streaming Entertainment',
     sharesOutstanding: 4_163_939_676,
-    isCyclical: false,
-    jvCapexObligationUsd: 0,
-    maintenanceCapexRatio: 0.25,
-    ttmFcfUsd: 7_100_000_000,
-    netCashUsd: -7_200_000_000,
-    beta: 1.25,
-    baseGrowth: 0.13,
   },
   META: {
     ticker: 'META',
@@ -209,13 +116,6 @@ export const TICKER_REGISTRY: Record<string, TickerConfig> = {
     assetType: 'equity',
     sector: 'Social Media & AI',
     sharesOutstanding: 2_556_830_000,
-    isCyclical: false,
-    jvCapexObligationUsd: 0,
-    maintenanceCapexRatio: 0.45,
-    ttmFcfUsd: 52_000_000_000,
-    netCashUsd: 55_000_000_000,
-    beta: 1.22,
-    baseGrowth: 0.15,
   },
   INTC: {
     ticker: 'INTC',
@@ -223,13 +123,6 @@ export const TICKER_REGISTRY: Record<string, TickerConfig> = {
     assetType: 'equity',
     sector: 'Semiconductors',
     sharesOutstanding: 5_315_000_000,
-    isCyclical: true,
-    jvCapexObligationUsd: 4_000_000_000,
-    maintenanceCapexRatio: 0.65,
-    ttmFcfUsd: 1_100_000_000,
-    netCashUsd: -28_000_000_000,
-    beta: 1.15,
-    baseGrowth: 0.04,
   },
   TEM: {
     ticker: 'TEM',
@@ -237,13 +130,6 @@ export const TICKER_REGISTRY: Record<string, TickerConfig> = {
     assetType: 'equity',
     sector: 'Healthcare AI',
     sharesOutstanding: 177_198_230,
-    isCyclical: false,
-    jvCapexObligationUsd: 0,
-    maintenanceCapexRatio: 0.35,
-    ttmFcfUsd: 65_000_000,
-    netCashUsd: 310_000_000,
-    beta: 1.50,
-    baseGrowth: 0.28,
   },
   SOFI: {
     ticker: 'SOFI',
@@ -251,27 +137,25 @@ export const TICKER_REGISTRY: Record<string, TickerConfig> = {
     assetType: 'equity',
     sector: 'Fintech & Digital Banking',
     sharesOutstanding: 1_296_617_325,
-    isCyclical: false,
-    jvCapexObligationUsd: 0,
-    maintenanceCapexRatio: 0.30,
-    ttmFcfUsd: 480_000_000,
-    netCashUsd: 850_000_000,
-    beta: 1.75,
-    baseGrowth: 0.22,
+  },
+  XYZ: {
+    ticker: 'XYZ',
+    name: 'XYZ Test Corporation',
+    assetType: 'equity',
+    sector: 'Test Fixture Asset',
+    sharesOutstanding: 100_000_000,
   },
   SOL: {
     ticker: 'SOL',
     name: 'Solana',
     assetType: 'crypto',
     sector: 'Layer 1 Blockchain',
-    isCyclical: false,
   },
   BTC: {
     ticker: 'BTC',
     name: 'Bitcoin',
     assetType: 'crypto',
     sector: 'Digital Currency & Store of Value',
-    isCyclical: false,
   },
 };
 
