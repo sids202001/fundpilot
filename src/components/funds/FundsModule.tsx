@@ -121,7 +121,7 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
         </div>
         <button
           onClick={() => setIsCreateModalOpen(true)}
-          className="flex items-center gap-1.5 rounded-xl bg-teal-500 px-3.5 py-2 text-xs font-semibold text-slate-950 shadow-md hover:bg-teal-400"
+          className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-gold to-gold-light px-3.5 py-2 text-xs font-semibold text-[#0b0d10] shadow-[0_0_15px_rgba(212,175,55,0.25)] hover:brightness-110"
         >
           <Plus className="h-4 w-4" />
           <span>Create New Fund</span>
@@ -158,46 +158,46 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
               onClick={() => setActiveFundId(fund.id)}
               className={`cursor-pointer rounded-2xl border p-5 shadow-lg backdrop-blur-md transition-all ${
                 isSelected
-                  ? 'border-teal-500 bg-slate-900/90 ring-1 ring-teal-500/50'
-                  : 'border-slate-800 bg-slate-900/60 hover:border-slate-700'
+                  ? 'border-gold bg-[#111419]/90 ring-1 ring-gold/40'
+                  : 'border-[#262930] bg-[#111419]/70 hover:border-gold/30'
               }`}
             >
               <div className="flex items-center justify-between">
-                <span className="font-bold text-white">{fund.name}</span>
-                <span className="rounded bg-slate-800 px-2 py-0.5 text-[10px] font-semibold text-teal-300">
+                <span className="font-bold text-[#f5f3ef]">{fund.name}</span>
+                <span className="rounded bg-[#1e222b] px-2 py-0.5 text-[10px] font-semibold text-gold-light border border-gold/20">
                   {fund.currency}
                 </span>
               </div>
 
               {/* Progress and Balances */}
               <div className="mt-4 flex items-baseline justify-between">
-                <div className="text-2xl font-bold text-white">
+                <div className="text-2xl font-bold text-[#f5f3ef]">
                   {fund.currency === 'USD' ? '$' : '₹'}
                   {(fund.currentAmountCents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                 </div>
-                <div className="text-xs text-slate-400">
+                <div className="text-xs text-[#9e9a93]">
                   Target: {fund.currency === 'USD' ? '$' : '₹'}
                   {(fund.targetAmountCents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                 </div>
               </div>
 
               {/* Progress bar */}
-              <div className="mt-2 h-2.5 w-full overflow-hidden rounded-full bg-slate-800">
+              <div className="mt-2 h-2.5 w-full overflow-hidden rounded-full bg-[#1e222b]">
                 <div
-                  className="h-full rounded-full bg-teal-500 transition-all duration-300"
+                  className="h-full rounded-full bg-gold transition-all duration-300"
                   style={{ width: `${pct}%` }}
                 />
               </div>
 
               <div className="mt-3 flex items-center justify-between text-xs">
-                <span className="text-teal-400 font-semibold">{pct}% saved</span>
-                <span className="text-slate-400">Target: {fund.targetDate}</span>
+                <span className="text-gold-light font-semibold">{pct}% saved</span>
+                <span className="text-[#9e9a93]">Target: {fund.targetDate}</span>
               </div>
 
               {/* Monthly requirement */}
-              <div className="mt-2 border-t border-slate-800/80 pt-2 text-[11px] text-slate-400">
+              <div className="mt-2 border-t border-[#262930] pt-2 text-[11px] text-[#9e9a93]">
                 <span>Monthly needed: </span>
-                <strong className="text-white">
+                <strong className="text-[#f5f3ef]">
                   {fund.currency === 'USD' ? '$' : '₹'}
                   {(monthlyNeededCents / 100).toFixed(0)}/mo
                 </strong>
@@ -218,16 +218,16 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
 
       {/* Selected Fund Detail & Allocation Ledger */}
       {selectedFund ? (
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 backdrop-blur-md">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-slate-800 pb-4">
+        <div className="rounded-2xl border border-[#262930] bg-[#111419]/80 p-6 backdrop-blur-md">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-[#262930] pb-4">
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-lg font-bold text-white">{selectedFund.name} Detail Ledger</h3>
-                <span className="rounded bg-teal-500/10 px-2 py-0.5 text-xs text-teal-400 font-medium">
+                <h3 className="text-lg font-bold text-[#f5f3ef]">{selectedFund.name} Detail Ledger</h3>
+                <span className="rounded bg-gold/10 px-2 py-0.5 text-xs text-gold-light font-medium border border-gold/30">
                   {selectedFund.currency}
                 </span>
               </div>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-[#9e9a93]">
                 Audit trail of all deposits, withdrawals, and automated recurring rules.
               </p>
             </div>
@@ -238,16 +238,16 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
                   setAllocType('deposit');
                   setIsAllocateModalOpen(true);
                 }}
-                className="flex items-center gap-1.5 rounded-xl bg-teal-500 px-3 py-1.5 text-xs font-semibold text-slate-950 hover:bg-teal-400"
+                className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-gold to-gold-light px-3 py-1.5 text-xs font-semibold text-[#0b0d10] hover:brightness-110"
               >
                 <ArrowDownLeft className="h-4 w-4" />
                 <span>Deposit / Withdraw</span>
               </button>
               <button
                 onClick={() => setIsRuleModalOpen(true)}
-                className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700 hover:text-white"
+                className="flex items-center gap-1.5 rounded-xl border border-[#262930] bg-[#171a21] px-3 py-1.5 text-xs font-medium text-[#f5f3ef] hover:border-gold/40 hover:bg-[#1e222b]"
               >
-                <Repeat className="h-4 w-4 text-teal-400" />
+                <Repeat className="h-4 w-4 text-gold-light" />
                 <span>Add Auto-Rule</span>
               </button>
             </div>
@@ -255,18 +255,18 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
 
           {/* Active Auto-Rules for this fund */}
           {activeRules.length > 0 && (
-            <div className="mt-4 rounded-xl border border-indigo-500/30 bg-indigo-500/10 p-3">
-              <div className="flex items-center gap-2 text-xs font-semibold text-indigo-300">
+            <div className="mt-4 rounded-xl border border-gold/30 bg-gold/10 p-3">
+              <div className="flex items-center gap-2 text-xs font-semibold text-gold-light">
                 <Repeat className="h-4 w-4" />
                 <span>Active Auto-Rules (Catch-up runs on launch)</span>
               </div>
               <div className="mt-2 space-y-1">
                 {activeRules.map((rule) => (
-                  <div key={rule.id} className="flex items-center justify-between text-xs text-indigo-200">
+                  <div key={rule.id} className="flex items-center justify-between text-xs text-[#f5f3ef]">
                     <span>
                       Move ${ (rule.amountCents / 100).toFixed(2) } on the {rule.dayOfMonth}th of every month
                     </span>
-                    <span className="text-[11px] text-indigo-400">
+                    <span className="text-[11px] text-gold-light">
                       Last applied: {rule.lastAppliedDate || 'Pending first run'}
                     </span>
                   </div>
@@ -277,10 +277,10 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
 
           {/* Allocations History */}
           <div className="mt-4">
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-[#9e9a93] mb-2">
               Transaction History
             </h4>
-            <div className="divide-y divide-slate-800 rounded-xl border border-slate-800 bg-slate-950/40">
+            <div className="divide-y divide-[#262930] rounded-xl border border-[#262930] bg-[#0b0d10]/60">
               {activeAllocations.length > 0 ? (
                 activeAllocations.map((alloc) => (
                   <div key={alloc.id} className="flex items-center justify-between p-3 text-xs">
@@ -288,22 +288,22 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
                       <div
                         className={`flex h-8 w-8 items-center justify-center rounded-lg ${
                           alloc.type === 'deposit'
-                            ? 'bg-teal-500/15 text-teal-400'
-                            : 'bg-rose-500/15 text-rose-400'
+                            ? 'bg-gain/15 text-gain'
+                            : 'bg-loss/15 text-loss'
                         }`}
                       >
                         {alloc.type === 'deposit' ? <ArrowDownLeft className="h-4 w-4" /> : <ArrowUpRight className="h-4 w-4" />}
                       </div>
                       <div>
-                        <div className="font-semibold text-white capitalize">{alloc.type}</div>
-                        <div className="text-[11px] text-slate-400">
+                        <div className="font-semibold text-[#f5f3ef] capitalize">{alloc.type}</div>
+                        <div className="text-[11px] text-[#9e9a93]">
                           {alloc.date} {alloc.note && `• ${alloc.note}`}
                         </div>
                       </div>
                     </div>
                     <div
                       className={`text-sm font-bold ${
-                        alloc.type === 'deposit' ? 'text-teal-400' : 'text-rose-400'
+                        alloc.type === 'deposit' ? 'text-gain' : 'text-loss'
                       }`}
                     >
                       {alloc.type === 'deposit' ? '+' : '-'}${(alloc.amountCents / 100).toFixed(2)}
@@ -311,7 +311,7 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
                   </div>
                 ))
               ) : (
-                <div className="p-6 text-center text-xs text-slate-500">
+                <div className="p-6 text-center text-xs text-[#9e9a93]">
                   No allocations yet. Deposit funds to start saving towards this goal.
                 </div>
               )}
@@ -319,36 +319,36 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
           </div>
         </div>
       ) : (
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-12 text-center text-xs text-slate-500">
+        <div className="rounded-2xl border border-[#262930] bg-[#111419]/40 p-12 text-center text-xs text-[#9e9a93]">
           No sinking funds created. Click &quot;Create New Fund&quot; to set up an Emergency Fund, Vacation Fund, or Investment Fund.
         </div>
       )}
 
       {/* CREATE FUND MODAL */}
       {isCreateModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
-            <h3 className="text-base font-bold text-white">Create Sinking Fund</h3>
-            <p className="mt-1 text-xs text-slate-400">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0b0d10]/80 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-[#262930] bg-[#111419] p-6 shadow-2xl">
+            <h3 className="text-base font-bold text-[#f5f3ef]">Create Sinking Fund</h3>
+            <p className="mt-1 text-xs text-[#9e9a93]">
               Money with a job — segregated from spendable cash.
             </p>
 
             <form onSubmit={handleCreateFund} className="mt-4 space-y-3">
               <div>
-                <label className="text-xs text-slate-400">Fund Name</label>
+                <label className="text-xs text-[#9e9a93]">Fund Name</label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. Emergency Fund, House Fund, Vacation"
                   value={fundName}
                   onChange={(e) => setFundName(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-white focus:border-teal-500 focus:outline-none"
+                  className="mt-1 w-full rounded-xl border border-[#262930] bg-[#0b0d10] px-3 py-2 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs text-slate-400">Target Amount</label>
+                  <label className="text-xs text-[#9e9a93]">Target Amount</label>
                   <input
                     type="number"
                     step="0.01"
@@ -356,15 +356,15 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
                     placeholder="2000.00"
                     value={targetAmount}
                     onChange={(e) => setTargetAmount(e.target.value)}
-                    className="mt-1 w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-white focus:border-teal-500 focus:outline-none"
+                    className="mt-1 w-full rounded-xl border border-[#262930] bg-[#0b0d10] px-3 py-2 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-slate-400">Currency</label>
+                  <label className="text-xs text-[#9e9a93]">Currency</label>
                   <select
                     value={currency}
                     onChange={(e) => setCurrency(e.target.value as 'USD' | 'INR')}
-                    className="mt-1 w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-white focus:border-teal-500 focus:outline-none"
+                    className="mt-1 w-full rounded-xl border border-[#262930] bg-[#0b0d10] px-3 py-2 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
                   >
                     <option value="USD">USD ($)</option>
                     <option value="INR">INR (₹)</option>
@@ -373,13 +373,13 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
               </div>
 
               <div>
-                <label className="text-xs text-slate-400">Target Date</label>
+                <label className="text-xs text-[#9e9a93]">Target Date</label>
                 <input
                   type="date"
                   required
                   value={targetDate}
                   onChange={(e) => setTargetDate(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-white focus:border-teal-500 focus:outline-none"
+                  className="mt-1 w-full rounded-xl border border-[#262930] bg-[#0b0d10] px-3 py-2 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
                 />
               </div>
 
@@ -387,13 +387,13 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
                 <button
                   type="button"
                   onClick={() => setIsCreateModalOpen(false)}
-                  className="rounded-xl px-4 py-2 text-xs text-slate-400 hover:text-white"
+                  className="rounded-xl px-4 py-2 text-xs text-[#9e9a93] hover:text-[#f5f3ef]"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="rounded-xl bg-teal-500 px-4 py-2 text-xs font-semibold text-slate-950 hover:bg-teal-400"
+                  className="rounded-xl bg-gradient-to-r from-gold to-gold-light px-4 py-2 text-xs font-semibold text-[#0b0d10] hover:brightness-110"
                 >
                   Create Fund
                 </button>
@@ -405,9 +405,9 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
 
       {/* ALLOCATE MODAL */}
       {isAllocateModalOpen && selectedFund && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
-            <h3 className="text-base font-bold text-white">Allocate Money: {selectedFund.name}</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0b0d10]/80 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-[#262930] bg-[#111419] p-6 shadow-2xl">
+            <h3 className="text-base font-bold text-[#f5f3ef]">Allocate Money: {selectedFund.name}</h3>
             <form onSubmit={handleAllocate} className="mt-4 space-y-3">
               <div className="flex gap-2">
                 <button
@@ -415,8 +415,8 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
                   onClick={() => setAllocType('deposit')}
                   className={`flex-1 rounded-xl py-2 text-xs font-semibold transition-all ${
                     allocType === 'deposit'
-                      ? 'bg-teal-500 text-slate-950'
-                      : 'border border-slate-800 bg-slate-950 text-slate-400'
+                      ? 'bg-gradient-to-r from-gold to-gold-light text-[#0b0d10]'
+                      : 'border border-[#262930] bg-[#0b0d10] text-[#9e9a93]'
                   }`}
                 >
                   Deposit
@@ -426,8 +426,8 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
                   onClick={() => setAllocType('withdraw')}
                   className={`flex-1 rounded-xl py-2 text-xs font-semibold transition-all ${
                     allocType === 'withdraw'
-                      ? 'bg-rose-500 text-white'
-                      : 'border border-slate-800 bg-slate-950 text-slate-400'
+                      ? 'bg-loss text-white'
+                      : 'border border-[#262930] bg-[#0b0d10] text-[#9e9a93]'
                   }`}
                 >
                   Withdraw
@@ -435,7 +435,7 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
               </div>
 
               <div>
-                <label className="text-xs text-slate-400">Amount ({selectedFund.currency})</label>
+                <label className="text-xs text-[#9e9a93]">Amount ({selectedFund.currency})</label>
                 <input
                   type="number"
                   step="0.01"
@@ -443,18 +443,18 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
                   placeholder="100.00"
                   value={allocAmount}
                   onChange={(e) => setAllocAmount(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-white focus:border-teal-500 focus:outline-none"
+                  className="mt-1 w-full rounded-xl border border-[#262930] bg-[#0b0d10] px-3 py-2 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
                 />
               </div>
 
               <div>
-                <label className="text-xs text-slate-400">Note (Optional)</label>
+                <label className="text-xs text-[#9e9a93]">Note (Optional)</label>
                 <input
                   type="text"
                   placeholder="e.g. Monthly transfer, bonus allocation"
                   value={allocNote}
                   onChange={(e) => setAllocNote(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-white focus:border-teal-500 focus:outline-none"
+                  className="mt-1 w-full rounded-xl border border-[#262930] bg-[#0b0d10] px-3 py-2 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
                 />
               </div>
 
@@ -462,13 +462,13 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
                 <button
                   type="button"
                   onClick={() => setIsAllocateModalOpen(false)}
-                  className="rounded-xl px-4 py-2 text-xs text-slate-400 hover:text-white"
+                  className="rounded-xl px-4 py-2 text-xs text-[#9e9a93] hover:text-[#f5f3ef]"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="rounded-xl bg-teal-500 px-4 py-2 text-xs font-semibold text-slate-950 hover:bg-teal-400"
+                  className="rounded-xl bg-gradient-to-r from-gold to-gold-light px-4 py-2 text-xs font-semibold text-[#0b0d10] hover:brightness-110"
                 >
                   Confirm Allocation
                 </button>
@@ -480,16 +480,16 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
 
       {/* AUTO-RULE MODAL */}
       {isRuleModalOpen && selectedFund && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
-            <h3 className="text-base font-bold text-white">Create Auto-Rule: {selectedFund.name}</h3>
-            <p className="mt-1 text-xs text-slate-400">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0b0d10]/80 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-[#262930] bg-[#111419] p-6 shadow-2xl">
+            <h3 className="text-base font-bold text-[#f5f3ef]">Create Auto-Rule: {selectedFund.name}</h3>
+            <p className="mt-1 text-xs text-[#9e9a93]">
               E.g. &quot;Move $200 on the 1st of every month&quot;. Rules execute on app launch with automatic catch-up.
             </p>
 
             <form onSubmit={handleCreateRule} className="mt-4 space-y-3">
               <div>
-                <label className="text-xs text-slate-400">Monthly Transfer Amount ($ USD)</label>
+                <label className="text-xs text-[#9e9a93]">Monthly Transfer Amount ($ USD)</label>
                 <input
                   type="number"
                   step="0.01"
@@ -497,12 +497,12 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
                   placeholder="200.00"
                   value={ruleAmount}
                   onChange={(e) => setRuleAmount(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-white focus:border-teal-500 focus:outline-none"
+                  className="mt-1 w-full rounded-xl border border-[#262930] bg-[#0b0d10] px-3 py-2 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
                 />
               </div>
 
               <div>
-                <label className="text-xs text-slate-400">Day of Month (1 - 31)</label>
+                <label className="text-xs text-[#9e9a93]">Day of Month (1 - 31)</label>
                 <input
                   type="number"
                   min="1"
@@ -510,7 +510,7 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
                   required
                   value={ruleDay}
                   onChange={(e) => setRuleDay(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-white focus:border-teal-500 focus:outline-none"
+                  className="mt-1 w-full rounded-xl border border-[#262930] bg-[#0b0d10] px-3 py-2 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
                 />
               </div>
 
@@ -518,13 +518,13 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
                 <button
                   type="button"
                   onClick={() => setIsRuleModalOpen(false)}
-                  className="rounded-xl px-4 py-2 text-xs text-slate-400 hover:text-white"
+                  className="rounded-xl px-4 py-2 text-xs text-[#9e9a93] hover:text-[#f5f3ef]"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="rounded-xl bg-teal-500 px-4 py-2 text-xs font-semibold text-slate-950 hover:bg-teal-400"
+                  className="rounded-xl bg-gradient-to-r from-gold to-gold-light px-4 py-2 text-xs font-semibold text-[#0b0d10] hover:brightness-110"
                 >
                   Save Auto-Rule
                 </button>

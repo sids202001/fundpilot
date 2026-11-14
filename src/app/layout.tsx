@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#0d9488',
+  themeColor: '#d4af37',
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
@@ -27,7 +27,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
-      <body className="min-h-screen bg-[#060911] text-slate-100 antialiased selection:bg-teal-500 selection:text-slate-950">
+      <body className="min-h-screen bg-[#0b0d10] text-[#f5f3ef] antialiased selection:bg-[#d4af37]/30 selection:text-white">
         <StoreProvider>
           {children}
         </StoreProvider>

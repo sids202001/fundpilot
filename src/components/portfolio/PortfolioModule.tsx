@@ -282,46 +282,46 @@ export function PortfolioModule({ selectedTicker }: { selectedTicker?: string | 
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => setIsManualModalOpen(true)}
-            className="flex items-center gap-1.5 rounded-xl bg-teal-500 px-3.5 py-2 text-xs font-semibold text-slate-950 shadow-md hover:bg-teal-400"
+            className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-gold to-gold-light px-3.5 py-2 text-xs font-semibold text-[#0b0d10] shadow-[0_0_15px_rgba(212,175,55,0.25)] hover:brightness-110"
           >
             <Plus className="h-4 w-4" />
             <span>Add Holding</span>
           </button>
           <button
             onClick={() => setIsBrokerCSVModalOpen(true)}
-            className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/80 px-3.5 py-2 text-xs font-medium text-slate-200 hover:bg-slate-700 hover:text-white"
+            className="flex items-center gap-1.5 rounded-xl border border-[#262930] bg-[#171a21] px-3.5 py-2 text-xs font-medium text-[#f5f3ef] hover:border-gold/40 hover:bg-[#1e222b]"
           >
-            <Upload className="h-4 w-4 text-indigo-400" />
+            <Upload className="h-4 w-4 text-gold-light" />
             <span>Broker CSV</span>
           </button>
           <button
             onClick={() => setIsSplitModalOpen(true)}
-            className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/80 px-3.5 py-2 text-xs font-medium text-slate-200 hover:bg-slate-700 hover:text-white"
+            className="flex items-center gap-1.5 rounded-xl border border-[#262930] bg-[#171a21] px-3.5 py-2 text-xs font-medium text-[#f5f3ef] hover:border-gold/40 hover:bg-[#1e222b]"
           >
-            <Split className="h-4 w-4 text-amber-400" />
+            <Split className="h-4 w-4 text-gold-light" />
             <span>Stock Split</span>
           </button>
           <button
             onClick={() => setIsDividendModalOpen(true)}
-            className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/80 px-3.5 py-2 text-xs font-medium text-slate-200 hover:bg-slate-700 hover:text-white"
+            className="flex items-center gap-1.5 rounded-xl border border-[#262930] bg-[#171a21] px-3.5 py-2 text-xs font-medium text-[#f5f3ef] hover:border-gold/40 hover:bg-[#1e222b]"
           >
-            <DollarSign className="h-4 w-4 text-emerald-400" />
+            <DollarSign className="h-4 w-4 text-gain" />
             <span>Record Dividend</span>
           </button>
         </div>
       </div>
 
       {/* Acceptance Test 1 Callout Banner */}
-      <div className="flex flex-col gap-3 rounded-2xl border border-teal-500/30 bg-teal-500/10 p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-2 text-xs text-teal-200">
-          <ShieldCheck className="h-4 w-4 text-teal-400 shrink-0" />
+      <div className="flex flex-col gap-3 rounded-2xl border border-gold/30 bg-gold/10 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2 text-xs text-gold-light">
+          <ShieldCheck className="h-4 w-4 text-gold shrink-0" />
           <span>
             <strong>Acceptance Test 1 Ready:</strong> XYZ 8-for-1 Split Test. Invariance check ensures total cost stays $1,150.89 across 8 shares @ $143.86.
           </span>
         </div>
         <button
           onClick={runXyzAcceptanceDrill}
-          className="rounded-lg bg-teal-500 px-3 py-1 text-[11px] font-bold text-slate-950 hover:bg-teal-400"
+          className="rounded-lg bg-gradient-to-r from-gold to-gold-light px-3 py-1 text-[11px] font-bold text-[#0b0d10] hover:brightness-110"
         >
           Run XYZ 8:1 Drill
         </button>
@@ -455,11 +455,11 @@ export function PortfolioModule({ selectedTicker }: { selectedTicker?: string | 
                         ${mktVal > 0 ? mktVal.toFixed(2) : costVal.toFixed(2)}
                       </td>
                       <td className="p-3.5">
-                        <span className={pnl >= 0 ? 'text-emerald-400 font-semibold' : 'text-rose-400 font-semibold'}>
+                        <span className={pnl >= 0 ? 'text-gain font-semibold' : 'text-loss font-semibold'}>
                           {pnl >= 0 ? '+' : ''}${pnl.toFixed(2)} ({pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(1)}%)
                         </span>
                       </td>
-                      <td className="p-3.5 text-teal-300">
+                      <td className="p-3.5 text-gold-light">
                         ${((h.dividendsReceivedCents || 0) / 100).toFixed(2)}
                       </td>
                     </tr>
@@ -467,7 +467,7 @@ export function PortfolioModule({ selectedTicker }: { selectedTicker?: string | 
                 })
               ) : (
                 <tr>
-                  <td colSpan={8} className="p-8 text-center text-slate-500">
+                  <td colSpan={8} className="p-8 text-center text-[#9e9a93]">
                     No holdings in portfolio. Add manually or import broker CSV.
                   </td>
                 </tr>
@@ -482,31 +482,31 @@ export function PortfolioModule({ selectedTicker }: { selectedTicker?: string | 
         <div className="space-y-6">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {/* Concentration card */}
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 shadow-lg backdrop-blur-md">
-              <span className="text-xs text-slate-400 font-medium">Top 3 Concentration</span>
-              <div className="mt-1 text-2xl font-bold text-white">
+            <div className="rounded-2xl border border-[#262930] bg-[#111419]/70 p-5 shadow-lg backdrop-blur-md">
+              <span className="text-xs text-[#9e9a93] font-medium">Top 3 Concentration</span>
+              <div className="mt-1 text-2xl font-bold text-[#f5f3ef]">
                 {riskAnalysis.top3ConcentrationPct}%
               </div>
-              <div className="mt-2 text-xs text-slate-400">
+              <div className="mt-2 text-xs text-[#9e9a93]">
                 Top holdings:{' '}
                 {riskAnalysis.top3Holdings.map((h) => `${h.ticker} ($${(h.value).toFixed(0)})`).join(', ') || 'None'}
               </div>
             </div>
 
             {/* Sector Exposure */}
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 shadow-lg backdrop-blur-md">
-              <span className="text-xs text-slate-400 font-medium">Sector Exposure Breakdown</span>
+            <div className="rounded-2xl border border-[#262930] bg-[#111419]/70 p-5 shadow-lg backdrop-blur-md">
+              <span className="text-xs text-[#9e9a93] font-medium">Sector Exposure Breakdown</span>
               <div className="mt-3 space-y-2">
                 {Array.from(riskAnalysis.sectors.entries()).map(([sec, val]) => {
                   const pct = totalMarketValueDollars > 0 ? Math.round((val / totalMarketValueDollars) * 100) : 0;
                   return (
                     <div key={sec} className="text-xs">
-                      <div className="flex justify-between text-slate-300">
+                      <div className="flex justify-between text-[#f5f3ef]">
                         <span>{sec}</span>
                         <span>{pct}% (${val.toFixed(0)})</span>
                       </div>
-                      <div className="mt-1 h-1.5 w-full rounded-full bg-slate-800">
-                        <div className="h-full rounded-full bg-indigo-500" style={{ width: `${pct}%` }} />
+                      <div className="mt-1 h-1.5 w-full rounded-full bg-[#1e222b]">
+                        <div className="h-full rounded-full bg-gold" style={{ width: `${pct}%` }} />
                       </div>
                     </div>
                   );
@@ -529,18 +529,18 @@ export function PortfolioModule({ selectedTicker }: { selectedTicker?: string | 
           )}
 
           {/* Plain-English Rebalancing Suggestion */}
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 backdrop-blur-md">
+          <div className="rounded-2xl border border-[#262930] bg-[#111419]/70 p-5 backdrop-blur-md">
             <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-teal-400" />
-              <h3 className="text-sm font-semibold text-white">AI Portfolio Risk Readout</h3>
-              <span className="rounded bg-teal-500/10 px-2 py-0.5 text-[10px] text-teal-400 font-medium">
+              <Sparkles className="h-4 w-4 text-gold-light" />
+              <h3 className="text-sm font-semibold text-[#f5f3ef]">AI Portfolio Risk Readout</h3>
+              <span className="rounded bg-gold/10 px-2 py-0.5 text-[10px] text-gold-light font-medium border border-gold/30">
                 AI-Generated Readout
               </span>
             </div>
-            <p className="mt-3 text-xs leading-relaxed text-slate-300">
+            <p className="mt-3 text-xs leading-relaxed text-[#c8c4bc]">
               {riskAnalysis.rebalancingSuggestion}
             </p>
-            <p className="mt-2 text-[10px] text-slate-500 italic">
+            <p className="mt-2 text-[10px] text-[#716c64] italic">
               Label: Suggestions are generated by local heuristics and say &quot;consider&quot;. Never financial advice.
             </p>
           </div>
@@ -550,23 +550,23 @@ export function PortfolioModule({ selectedTicker }: { selectedTicker?: string | 
       {/* VIEW 4: Dividend Calendar */}
       {activeTab === 'calendar' && (
         <div className="space-y-4">
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 backdrop-blur-md">
-            <h3 className="text-sm font-semibold text-white">Dividend Income Calendar</h3>
-            <p className="text-xs text-slate-400">
+          <div className="rounded-2xl border border-[#262930] bg-[#111419]/70 p-5 backdrop-blur-md">
+            <h3 className="text-sm font-semibold text-[#f5f3ef]">Dividend Income Calendar</h3>
+            <p className="text-xs text-[#9e9a93]">
               Acceptance Check 5: Holdings with known ex-dates appear on the income calendar. Dividends are counted as income, not price gains.
             </p>
           </div>
 
-          <div className="divide-y divide-slate-800 rounded-2xl border border-slate-800 bg-slate-900/60 backdrop-blur-md">
+          <div className="divide-y divide-[#262930] rounded-2xl border border-[#262930] bg-[#111419]/70 backdrop-blur-md">
             {dividendSchedule.map((div, i) => (
               <div key={i} className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="font-bold text-white">{div.ticker}</span>
-                    <span className="text-xs text-slate-400">{div.month}</span>
+                    <span className="font-bold text-[#f5f3ef]">{div.ticker}</span>
+                    <span className="text-xs text-[#9e9a93]">{div.month}</span>
                   </div>
-                  <div className="mt-1 flex items-center gap-3 text-xs text-slate-400">
-                    <span>Ex-Date: <strong className="text-teal-400">{div.exDate}</strong></span>
+                  <div className="mt-1 flex items-center gap-3 text-xs text-[#9e9a93]">
+                    <span>Ex-Date: <strong className="text-gold-light">{div.exDate}</strong></span>
                     <span>•</span>
                     <span>Pay Date: {div.payDate}</span>
                     <span>•</span>
@@ -575,10 +575,10 @@ export function PortfolioModule({ selectedTicker }: { selectedTicker?: string | 
                 </div>
 
                 <div className="text-right">
-                  <div className="text-sm font-bold text-teal-300">
+                  <div className="text-sm font-bold text-gold-light">
                     ${div.estimatedPayout.toFixed(2)} Projected
                   </div>
-                  <span className="text-[11px] text-slate-500">
+                  <span className="text-[11px] text-[#716c64]">
                     {div.sharesHeld > 0 ? `Based on ${div.sharesHeld} shares` : '0 shares held'}
                   </span>
                 </div>
@@ -590,33 +590,33 @@ export function PortfolioModule({ selectedTicker }: { selectedTicker?: string | 
 
       {/* VIEW 5: Portfolio Goal Tracking */}
       {activeTab === 'goals' && (
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 backdrop-blur-md space-y-4">
+        <div className="rounded-2xl border border-[#262930] bg-[#111419]/70 p-6 backdrop-blur-md space-y-4">
           <div className="flex items-center gap-2">
-            <Target className="h-5 w-5 text-teal-400" />
-            <h3 className="text-base font-bold text-white">Portfolio Target Goal</h3>
+            <Target className="h-5 w-5 text-gold-light" />
+            <h3 className="text-base font-bold text-[#f5f3ef]">Portfolio Target Goal</h3>
           </div>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-[#9e9a93]">
             Track current portfolio value vs a target dollar amount by a target date, and compute required monthly contribution.
           </p>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className="text-xs text-slate-400">Target Value ($ USD)</label>
+              <label className="text-xs text-[#9e9a93]">Target Value ($ USD)</label>
               <input
                 type="number"
                 step="1000"
                 value={goalTargetValue}
                 onChange={(e) => setGoalTargetValue(e.target.value)}
-                className="mt-1 w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-white focus:border-teal-500 focus:outline-none"
+                className="mt-1 w-full rounded-xl border border-[#262930] bg-[#0b0d10] px-3 py-2 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
               />
             </div>
             <div>
-              <label className="text-xs text-slate-400">Target Date</label>
+              <label className="text-xs text-[#9e9a93]">Target Date</label>
               <input
                 type="date"
                 value={goalTargetDate}
                 onChange={(e) => setGoalTargetDate(e.target.value)}
-                className="mt-1 w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-white focus:border-teal-500 focus:outline-none"
+                className="mt-1 w-full rounded-xl border border-[#262930] bg-[#0b0d10] px-3 py-2 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
               />
             </div>
           </div>
@@ -624,7 +624,7 @@ export function PortfolioModule({ selectedTicker }: { selectedTicker?: string | 
           <div className="flex justify-end">
             <button
               onClick={handleSaveGoal}
-              className="rounded-xl bg-teal-500 px-4 py-2 text-xs font-semibold text-slate-950 hover:bg-teal-400"
+              className="rounded-xl bg-gradient-to-r from-gold to-gold-light px-4 py-2 text-xs font-semibold text-[#0b0d10] hover:brightness-110"
             >
               Update Goal
             </button>
@@ -642,17 +642,17 @@ export function PortfolioModule({ selectedTicker }: { selectedTicker?: string | 
             const monthlyCont = gap / mos;
 
             return (
-              <div className="mt-4 rounded-xl border border-slate-800 bg-slate-950/50 p-4 space-y-3">
+              <div className="mt-4 rounded-xl border border-[#262930] bg-[#0b0d10]/60 p-4 space-y-3">
                 <div className="flex justify-between text-xs">
-                  <span className="text-slate-400">Goal Progress</span>
-                  <span className="font-bold text-teal-400">${current.toFixed(0)} / ${target.toFixed(0)} ({pct}%)</span>
+                  <span className="text-[#9e9a93]">Goal Progress</span>
+                  <span className="font-bold text-gold-light">${current.toFixed(0)} / ${target.toFixed(0)} ({pct}%)</span>
                 </div>
-                <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-800">
-                  <div className="h-full rounded-full bg-teal-500" style={{ width: `${pct}%` }} />
+                <div className="h-2.5 w-full overflow-hidden rounded-full bg-[#1e222b]">
+                  <div className="h-full rounded-full bg-gold" style={{ width: `${pct}%` }} />
                 </div>
-                <div className="flex justify-between text-xs text-slate-400">
+                <div className="flex justify-between text-xs text-[#9e9a93]">
                   <span>Target Date: {goalTargetDate} ({mos} months remaining)</span>
-                  <span>Required: <strong className="text-white">${monthlyCont.toFixed(0)} / month</strong></span>
+                  <span>Required: <strong className="text-[#f5f3ef]">${monthlyCont.toFixed(0)} / month</strong></span>
                 </div>
               </div>
             );
@@ -662,24 +662,24 @@ export function PortfolioModule({ selectedTicker }: { selectedTicker?: string | 
 
       {/* MODAL 1: Add Holding Manually */}
       {isManualModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
-            <h3 className="text-base font-bold text-white">Add Holding Manually</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0b0d10]/80 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-[#262930] bg-[#111419] p-6 shadow-2xl">
+            <h3 className="text-base font-bold text-[#f5f3ef]">Add Holding Manually</h3>
             <form onSubmit={handleManualAddHolding} className="mt-4 space-y-3">
               <div>
-                <label className="text-xs text-slate-400">Ticker Symbol</label>
+                <label className="text-xs text-[#9e9a93]">Ticker Symbol</label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. NVDA, MSFT, AMD, XYZ, SOL, BTC"
                   value={formTicker}
                   onChange={(e) => setFormTicker(e.target.value.toUpperCase())}
-                  className="mt-1 w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-white focus:border-teal-500 focus:outline-none"
+                  className="mt-1 w-full rounded-xl border border-[#262930] bg-[#0b0d10] px-3 py-2 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs text-slate-400">Shares / Units</label>
+                  <label className="text-xs text-[#9e9a93]">Shares / Units</label>
                   <input
                     type="number"
                     step="any"
@@ -687,11 +687,11 @@ export function PortfolioModule({ selectedTicker }: { selectedTicker?: string | 
                     placeholder="1.0"
                     value={formShares}
                     onChange={(e) => setFormShares(e.target.value)}
-                    className="mt-1 w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-white focus:border-teal-500 focus:outline-none"
+                    className="mt-1 w-full rounded-xl border border-[#262930] bg-[#0b0d10] px-3 py-2 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="text-xs text-slate-400">Price Per Share ($)</label>
+                  <label className="text-xs text-[#9e9a93]">Price Per Share ($)</label>
                   <input
                     type="number"
                     step="0.01"
@@ -699,18 +699,18 @@ export function PortfolioModule({ selectedTicker }: { selectedTicker?: string | 
                     placeholder="145.00"
                     value={formPrice}
                     onChange={(e) => setFormPrice(e.target.value)}
-                    className="mt-1 w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-white focus:border-teal-500 focus:outline-none"
+                    className="mt-1 w-full rounded-xl border border-[#262930] bg-[#0b0d10] px-3 py-2 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
                   />
                 </div>
               </div>
               <div>
-                <label className="text-xs text-slate-400">Purchase Date</label>
+                <label className="text-xs text-[#9e9a93]">Purchase Date</label>
                 <input
                   type="date"
                   required
                   value={formDate}
                   onChange={(e) => setFormDate(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-white focus:border-teal-500 focus:outline-none"
+                  className="mt-1 w-full rounded-xl border border-[#262930] bg-[#0b0d10] px-3 py-2 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
                 />
               </div>
 
@@ -718,13 +718,13 @@ export function PortfolioModule({ selectedTicker }: { selectedTicker?: string | 
                 <button
                   type="button"
                   onClick={() => setIsManualModalOpen(false)}
-                  className="rounded-xl px-4 py-2 text-xs text-slate-400 hover:text-white"
+                  className="rounded-xl px-4 py-2 text-xs text-[#9e9a93] hover:text-[#f5f3ef]"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="rounded-xl bg-teal-500 px-4 py-2 text-xs font-semibold text-slate-950 hover:bg-teal-400"
+                  className="rounded-xl bg-gradient-to-r from-gold to-gold-light px-4 py-2 text-xs font-semibold text-[#0b0d10] hover:brightness-110"
                 >
                   Save Holding
                 </button>
@@ -736,34 +736,34 @@ export function PortfolioModule({ selectedTicker }: { selectedTicker?: string | 
 
       {/* MODAL 2: Stock Split (Hard Requirement) */}
       {isSplitModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
-            <h3 className="text-base font-bold text-white">Apply Corporate Action: Stock Split</h3>
-            <p className="mt-1 text-xs text-slate-400">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0b0d10]/80 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-[#262930] bg-[#111419] p-6 shadow-2xl">
+            <h3 className="text-base font-bold text-[#f5f3ef]">Apply Corporate Action: Stock Split</h3>
+            <p className="mt-1 text-xs text-[#9e9a93]">
               Adjusts share count and per-share cost basis such that total cost basis is preserved to the exact cent.
             </p>
 
             <form onSubmit={handleApplySplit} className="mt-4 space-y-3">
               <div>
-                <label className="text-xs text-slate-400">Ticker Symbol</label>
+                <label className="text-xs text-[#9e9a93]">Ticker Symbol</label>
                 <input
                   type="text"
                   required
                   value={splitTicker}
                   onChange={(e) => setSplitTicker(e.target.value.toUpperCase())}
-                  className="mt-1 w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-white focus:border-teal-500 focus:outline-none"
+                  className="mt-1 w-full rounded-xl border border-[#262930] bg-[#0b0d10] px-3 py-2 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
                 />
               </div>
 
               <div>
-                <label className="text-xs text-slate-400">Split Ratio (e.g. 8 for 8-for-1, 10 for 10-for-1)</label>
+                <label className="text-xs text-[#9e9a93]">Split Ratio (e.g. 8 for 8-for-1, 10 for 10-for-1)</label>
                 <input
                   type="number"
                   step="any"
                   required
                   value={splitRatio}
                   onChange={(e) => setSplitRatio(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-white focus:border-teal-500 focus:outline-none"
+                  className="mt-1 w-full rounded-xl border border-[#262930] bg-[#0b0d10] px-3 py-2 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
                 />
               </div>
 
@@ -771,13 +771,13 @@ export function PortfolioModule({ selectedTicker }: { selectedTicker?: string | 
                 <button
                   type="button"
                   onClick={() => setIsSplitModalOpen(false)}
-                  className="rounded-xl px-4 py-2 text-xs text-slate-400 hover:text-white"
+                  className="rounded-xl px-4 py-2 text-xs text-[#9e9a93] hover:text-[#f5f3ef]"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="rounded-xl bg-teal-500 px-4 py-2 text-xs font-semibold text-slate-950 hover:bg-teal-400"
+                  className="rounded-xl bg-gradient-to-r from-gold to-gold-light px-4 py-2 text-xs font-semibold text-[#0b0d10] hover:brightness-110"
                 >
                   Execute Split
                 </button>
@@ -789,38 +789,38 @@ export function PortfolioModule({ selectedTicker }: { selectedTicker?: string | 
 
       {/* MODAL 3: Broker CSV Import */}
       {isBrokerCSVModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-xl rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
-            <h3 className="text-base font-bold text-white">Import Brokerage Statement CSV</h3>
-            <p className="mt-1 text-xs text-slate-400">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0b0d10]/80 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-xl rounded-2xl border border-[#262930] bg-[#111419] p-6 shadow-2xl">
+            <h3 className="text-base font-bold text-[#f5f3ef]">Import Brokerage Statement CSV</h3>
+            <p className="mt-1 text-xs text-[#9e9a93]">
               Supports Robinhood, Charles Schwab, and Fidelity CSV formats. Automatically maps columns and reports unparsed rows.
             </p>
 
             <div className="mt-4 space-y-3">
               <div>
-                <label className="text-xs text-slate-400">Paste Broker CSV Text:</label>
+                <label className="text-xs text-[#9e9a93]">Paste Broker CSV Text:</label>
                 <textarea
                   rows={5}
                   placeholder={`Activity Date,Process Date,Settle Date,Instrument,Description,Trans Code,Quantity,Price,Amount\n11/01/2026,11/01/2026,11/03/2026,NVDA,NVIDIA Corporation,Buy,3.23,144.00,465.12\n11/01/2026,11/01/2026,11/03/2026,MSFT,Microsoft Corporation,Buy,3.01,361.00,1086.61`}
                   value={brokerCsvText}
                   onChange={(e) => setBrokerCsvText(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-slate-800 bg-slate-950 p-2.5 font-mono text-[11px] text-slate-200 focus:border-teal-500 focus:outline-none"
+                  className="mt-1 w-full rounded-xl border border-[#262930] bg-[#0b0d10] p-2.5 font-mono text-[11px] text-[#f5f3ef] focus:border-gold focus:outline-none"
                 />
               </div>
 
               <button
                 type="button"
                 onClick={handleBrokerCSVAnalyze}
-                className="rounded-xl bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700"
+                className="rounded-xl border border-[#262930] bg-[#171a21] px-3 py-1.5 text-xs font-medium text-[#f5f3ef] hover:border-gold/40 hover:bg-[#1e222b]"
               >
                 Parse Broker Format
               </button>
 
               {brokerResult && (
-                <div className="rounded-xl border border-slate-800 bg-slate-800/40 p-3 text-xs space-y-2">
-                  <div className="flex items-center justify-between font-semibold text-white">
+                <div className="rounded-xl border border-[#262930] bg-[#171a21]/50 p-3 text-xs space-y-2">
+                  <div className="flex items-center justify-between font-semibold text-[#f5f3ef]">
                     <span>Broker: {brokerResult.detectedBroker}</span>
-                    <span className="text-teal-400">{brokerResult.holdings.length} valid positions parsed</span>
+                    <span className="text-gold-light">{brokerResult.holdings.length} valid positions parsed</span>
                   </div>
 
                   {brokerResult.unparsedRows.length > 0 && (
@@ -839,7 +839,7 @@ export function PortfolioModule({ selectedTicker }: { selectedTicker?: string | 
               <button
                 type="button"
                 onClick={() => setIsBrokerCSVModalOpen(false)}
-                className="rounded-xl px-4 py-2 text-xs text-slate-400 hover:text-white"
+                className="rounded-xl px-4 py-2 text-xs text-[#9e9a93] hover:text-[#f5f3ef]"
               >
                 Cancel
               </button>
@@ -847,7 +847,7 @@ export function PortfolioModule({ selectedTicker }: { selectedTicker?: string | 
                 type="button"
                 disabled={!brokerResult || brokerResult.holdings.length === 0}
                 onClick={confirmBrokerImport}
-                className="rounded-xl bg-teal-500 px-4 py-2 text-xs font-semibold text-slate-950 hover:bg-teal-400 disabled:opacity-50"
+                className="rounded-xl bg-gradient-to-r from-gold to-gold-light px-4 py-2 text-xs font-semibold text-[#0b0d10] hover:brightness-110 disabled:opacity-50"
               >
                 Import {brokerResult?.holdings.length || 0} Holdings
               </button>
@@ -858,45 +858,45 @@ export function PortfolioModule({ selectedTicker }: { selectedTicker?: string | 
 
       {/* MODAL 4: Record Dividend */}
       {isDividendModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
-            <h3 className="text-base font-bold text-white">Record Dividend as Income</h3>
-            <p className="mt-1 text-xs text-slate-400">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0b0d10]/80 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-[#262930] bg-[#111419] p-6 shadow-2xl">
+            <h3 className="text-base font-bold text-[#f5f3ef]">Record Dividend as Income</h3>
+            <p className="mt-1 text-xs text-[#9e9a93]">
               Dividends are logged as pure income, never as price gains.
             </p>
 
             <form onSubmit={handleRecordDividend} className="mt-4 space-y-3">
               <div>
-                <label className="text-xs text-slate-400">Ticker Symbol</label>
+                <label className="text-xs text-[#9e9a93]">Ticker Symbol</label>
                 <input
                   type="text"
                   required
                   value={divTicker}
                   onChange={(e) => setDivTicker(e.target.value.toUpperCase())}
-                  className="mt-1 w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-white focus:border-teal-500 focus:outline-none"
+                  className="mt-1 w-full rounded-xl border border-[#262930] bg-[#0b0d10] px-3 py-2 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
                 />
               </div>
 
               <div>
-                <label className="text-xs text-slate-400">Total Dividend Received ($ USD)</label>
+                <label className="text-xs text-[#9e9a93]">Total Dividend Received ($ USD)</label>
                 <input
                   type="number"
                   step="0.01"
                   required
                   value={divAmount}
                   onChange={(e) => setDivAmount(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-white focus:border-teal-500 focus:outline-none"
+                  className="mt-1 w-full rounded-xl border border-[#262930] bg-[#0b0d10] px-3 py-2 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
                 />
               </div>
 
               <div>
-                <label className="text-xs text-slate-400">Payment Date</label>
+                <label className="text-xs text-[#9e9a93]">Payment Date</label>
                 <input
                   type="date"
                   required
                   value={divDate}
                   onChange={(e) => setDivDate(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-xs text-white focus:border-teal-500 focus:outline-none"
+                  className="mt-1 w-full rounded-xl border border-[#262930] bg-[#0b0d10] px-3 py-2 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
                 />
               </div>
 
@@ -904,13 +904,13 @@ export function PortfolioModule({ selectedTicker }: { selectedTicker?: string | 
                 <button
                   type="button"
                   onClick={() => setIsDividendModalOpen(false)}
-                  className="rounded-xl px-4 py-2 text-xs text-slate-400 hover:text-white"
+                  className="rounded-xl px-4 py-2 text-xs text-[#9e9a93] hover:text-[#f5f3ef]"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="rounded-xl bg-teal-500 px-4 py-2 text-xs font-semibold text-slate-950 hover:bg-teal-400"
+                  className="rounded-xl bg-gradient-to-r from-gold to-gold-light px-4 py-2 text-xs font-semibold text-[#0b0d10] hover:brightness-110"
                 >
                   Record Dividend
                 </button>

@@ -14,7 +14,6 @@ import {
   Wifi,
   WifiOff,
   Database,
-  Moon,
   Coins,
 } from 'lucide-react';
 
@@ -36,32 +35,32 @@ export function Navbar({ activeTab, setActiveTab, openBackupModal }: NavbarProps
   };
 
   return (
-    <header className="sticky top-0 z-40 border-b border-slate-800 bg-slate-950/80 backdrop-blur-md">
+    <header className="sticky top-0 z-40 border-b border-[#1e222b] bg-[#0e1014]/90 backdrop-blur-md">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-2.5 sm:px-6">
         {/* Brand */}
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-teal-500 to-emerald-400 text-slate-950 shadow-md shadow-teal-500/20">
-            <Compass className="h-5 w-5" />
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-[#d4af37] via-[#e5c07b] to-[#b8860b] text-[#0b0d10] shadow-md shadow-[#d4af37]/20">
+            <Compass className="h-5 w-5 font-bold" />
           </div>
           <div>
             <div className="flex items-center gap-1.5">
-              <span className="font-bold tracking-tight text-white">FundPilot</span>
-              <span className="rounded-full bg-teal-500/10 px-1.5 py-0.5 text-[10px] font-medium text-teal-400 border border-teal-500/20">
+              <span className="font-bold tracking-tight text-[#f5f3ef]">FundPilot</span>
+              <span className="rounded-full bg-[#d4af37]/10 px-1.5 py-0.5 text-[10px] font-medium text-[#d4af37] border border-[#d4af37]/25">
                 Local-First
               </span>
             </div>
-            <p className="text-[10px] text-slate-400">Zero-Tracking • AES-256 Encrypted</p>
+            <p className="text-[10px] text-[#9e9a93]">Zero-Tracking • AES-256 Encrypted</p>
           </div>
         </div>
 
         {/* Navigation Tabs */}
-        <nav className="hidden md:flex items-center gap-1 rounded-xl border border-slate-800 bg-slate-900/60 p-1">
+        <nav className="hidden md:flex items-center gap-1 rounded-xl border border-[#1e222b] bg-[#111419]/75 p-1">
           <button
             onClick={() => setActiveTab('dashboard')}
             className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
               activeTab === 'dashboard'
-                ? 'bg-teal-500/15 text-teal-300 border border-teal-500/30'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+                ? 'bg-[#d4af37]/15 text-[#f3d99b] border border-[#d4af37]/35 shadow-sm'
+                : 'text-[#9e9a93] hover:text-[#f5f3ef] hover:bg-[#1a1d24]'
             }`}
           >
             <PieChart className="h-4 w-4" />
@@ -71,8 +70,8 @@ export function Navbar({ activeTab, setActiveTab, openBackupModal }: NavbarProps
             onClick={() => setActiveTab('expenses')}
             className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
               activeTab === 'expenses'
-                ? 'bg-teal-500/15 text-teal-300 border border-teal-500/30'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+                ? 'bg-[#d4af37]/15 text-[#f3d99b] border border-[#d4af37]/35 shadow-sm'
+                : 'text-[#9e9a93] hover:text-[#f5f3ef] hover:bg-[#1a1d24]'
             }`}
           >
             <Wallet className="h-4 w-4" />
@@ -82,8 +81,8 @@ export function Navbar({ activeTab, setActiveTab, openBackupModal }: NavbarProps
             onClick={() => setActiveTab('funds')}
             className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
               activeTab === 'funds'
-                ? 'bg-teal-500/15 text-teal-300 border border-teal-500/30'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+                ? 'bg-[#d4af37]/15 text-[#f3d99b] border border-[#d4af37]/35 shadow-sm'
+                : 'text-[#9e9a93] hover:text-[#f5f3ef] hover:bg-[#1a1d24]'
             }`}
           >
             <PiggyBank className="h-4 w-4" />
@@ -93,8 +92,8 @@ export function Navbar({ activeTab, setActiveTab, openBackupModal }: NavbarProps
             onClick={() => setActiveTab('portfolio')}
             className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
               activeTab === 'portfolio'
-                ? 'bg-teal-500/15 text-teal-300 border border-teal-500/30'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+                ? 'bg-[#d4af37]/15 text-[#f3d99b] border border-[#d4af37]/35 shadow-sm'
+                : 'text-[#9e9a93] hover:text-[#f5f3ef] hover:bg-[#1a1d24]'
             }`}
           >
             <TrendingUp className="h-4 w-4" />
@@ -106,10 +105,10 @@ export function Navbar({ activeTab, setActiveTab, openBackupModal }: NavbarProps
         <div className="flex items-center gap-2">
           {/* FX Pill */}
           {fxRate && (
-            <div className="hidden lg:flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-900/60 px-2.5 py-1 text-[11px] text-slate-300">
-              <Coins className="h-3.5 w-3.5 text-amber-400" />
+            <div className="hidden lg:flex items-center gap-1.5 rounded-lg border border-[#1e222b] bg-[#111419]/75 px-2.5 py-1 text-[11px] text-[#f5f3ef]">
+              <Coins className="h-3.5 w-3.5 text-[#d4af37]" />
               <span>$1 = ₹{fxRate.rate.toFixed(2)}</span>
-              <span className="text-[9px] text-slate-500">({fxRate.asOfDate})</span>
+              <span className="text-[9px] text-[#9e9a93]">({fxRate.asOfDate})</span>
             </div>
           )}
 
@@ -119,11 +118,11 @@ export function Navbar({ activeTab, setActiveTab, openBackupModal }: NavbarProps
             title={settings.prefer2D ? 'Switch to 3D Scene' : 'Switch to 2D Charts'}
             className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition-all ${
               settings.prefer2D
-                ? 'border-indigo-500/40 bg-indigo-500/15 text-indigo-300'
-                : 'border-teal-500/40 bg-teal-500/15 text-teal-300'
+                ? 'border-[#d4af37]/30 bg-[#d4af37]/10 text-[#f3d99b]'
+                : 'border-[#d4af37]/40 bg-[#d4af37]/20 text-[#f5f3ef]'
             }`}
           >
-            {settings.prefer2D ? <Layers className="h-3.5 w-3.5" /> : <Box className="h-3.5 w-3.5" />}
+            {settings.prefer2D ? <Layers className="h-3.5 w-3.5" /> : <Box className="h-3.5 w-3.5 text-[#d4af37]" />}
             <span>{settings.prefer2D ? '2D View' : '3D Scene'}</span>
           </button>
 
@@ -143,7 +142,7 @@ export function Navbar({ activeTab, setActiveTab, openBackupModal }: NavbarProps
           <button
             onClick={openBackupModal}
             title="Encrypted Backup, CSV Export & Data Settings"
-            className="flex items-center rounded-lg border border-slate-800 bg-slate-900/60 p-1.5 text-slate-300 hover:border-slate-700 hover:text-white"
+            className="flex items-center rounded-lg border border-[#1e222b] bg-[#111419]/75 p-1.5 text-[#9e9a93] hover:border-[#d4af37]/40 hover:text-white transition-colors"
           >
             <Database className="h-3.5 w-3.5" />
           </button>
@@ -152,7 +151,7 @@ export function Navbar({ activeTab, setActiveTab, openBackupModal }: NavbarProps
           <button
             onClick={lockVault}
             title="Lock Vault Now"
-            className="flex items-center gap-1 rounded-lg border border-rose-500/30 bg-rose-500/10 px-2.5 py-1 text-xs font-medium text-rose-300 hover:bg-rose-500/20"
+            className="flex items-center gap-1 rounded-lg border border-rose-500/30 bg-rose-500/10 px-2.5 py-1 text-xs font-medium text-rose-300 hover:bg-rose-500/20 transition-colors"
           >
             <Lock className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Lock</span>
@@ -161,11 +160,11 @@ export function Navbar({ activeTab, setActiveTab, openBackupModal }: NavbarProps
       </div>
 
       {/* Mobile nav bar */}
-      <div className="flex md:hidden border-t border-slate-800/80 px-2 py-1 justify-around bg-slate-950">
+      <div className="flex md:hidden border-t border-[#1e222b] px-2 py-1 justify-around bg-[#0e1014]">
         <button
           onClick={() => setActiveTab('dashboard')}
           className={`flex flex-col items-center gap-0.5 py-1 text-[11px] font-medium ${
-            activeTab === 'dashboard' ? 'text-teal-400' : 'text-slate-400'
+            activeTab === 'dashboard' ? 'text-[#d4af37]' : 'text-[#9e9a93]'
           }`}
         >
           <PieChart className="h-4 w-4" />
@@ -174,7 +173,7 @@ export function Navbar({ activeTab, setActiveTab, openBackupModal }: NavbarProps
         <button
           onClick={() => setActiveTab('expenses')}
           className={`flex flex-col items-center gap-0.5 py-1 text-[11px] font-medium ${
-            activeTab === 'expenses' ? 'text-teal-400' : 'text-slate-400'
+            activeTab === 'expenses' ? 'text-[#d4af37]' : 'text-[#9e9a93]'
           }`}
         >
           <Wallet className="h-4 w-4" />
@@ -183,7 +182,7 @@ export function Navbar({ activeTab, setActiveTab, openBackupModal }: NavbarProps
         <button
           onClick={() => setActiveTab('funds')}
           className={`flex flex-col items-center gap-0.5 py-1 text-[11px] font-medium ${
-            activeTab === 'funds' ? 'text-teal-400' : 'text-slate-400'
+            activeTab === 'funds' ? 'text-[#d4af37]' : 'text-[#9e9a93]'
           }`}
         >
           <PiggyBank className="h-4 w-4" />
@@ -192,7 +191,7 @@ export function Navbar({ activeTab, setActiveTab, openBackupModal }: NavbarProps
         <button
           onClick={() => setActiveTab('portfolio')}
           className={`flex flex-col items-center gap-0.5 py-1 text-[11px] font-medium ${
-            activeTab === 'portfolio' ? 'text-teal-400' : 'text-slate-400'
+            activeTab === 'portfolio' ? 'text-[#d4af37]' : 'text-[#9e9a93]'
           }`}
         >
           <TrendingUp className="h-4 w-4" />

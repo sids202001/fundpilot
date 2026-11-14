@@ -31,9 +31,9 @@ export default function Home() {
 
   if (!isVaultReady) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#060911] text-xs text-slate-400">
+      <div className="flex min-h-screen items-center justify-center bg-[#0b0d10] text-xs text-[#9e9a93]">
         <div className="flex items-center gap-2">
-          <div className="h-4 w-4 animate-spin rounded-full border-2 border-teal-500 border-t-transparent" />
+          <div className="h-4 w-4 animate-spin rounded-full border-2 border-gold border-t-transparent" />
           <span>Initializing secure local vault...</span>
         </div>
       </div>
@@ -60,7 +60,7 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-[#060911] text-slate-100 flex flex-col font-sans">
+    <div className="min-h-screen bg-[#0b0d10] text-[#f5f3ef] flex flex-col font-sans">
       {/* Top Navbar */}
       <Navbar
         activeTab={activeTab}
@@ -110,7 +110,7 @@ export default function Home() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-slate-900 bg-slate-950/40 py-4 text-center text-[11px] text-slate-500">
+      <footer className="border-t border-[#1e222b] bg-[#0b0d10]/90 py-4 text-center text-[11px] text-[#9e9a93]">
         FundPilot • 100% Local-First • AES-GCM Encrypted at Rest • Zero Telemetry
       </footer>
 

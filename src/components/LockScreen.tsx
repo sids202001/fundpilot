@@ -115,21 +115,21 @@ export function LockScreen() {
   const currentDisplayPin = !isSetup && isConfirming ? confirmPin : pin;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950 p-4 font-sans text-slate-100">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0b0d10] p-4 font-sans text-[#f5f3ef]">
       {/* Background glow effects */}
-      <div className="pointer-events-none absolute -top-40 left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-teal-500/10 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-40 left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-emerald-500/10 blur-3xl" />
+      <div className="pointer-events-none absolute -top-40 left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-gold/10 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-40 left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-[#e5c07b]/5 blur-3xl" />
 
-      <div className="relative w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900/90 p-8 shadow-2xl backdrop-blur-xl">
+      <div className="relative w-full max-w-md rounded-2xl border border-[#2a2418] bg-[#111419]/95 p-8 shadow-2xl backdrop-blur-xl">
         {/* Header */}
         <div className="mb-6 flex flex-col items-center text-center">
-          <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-teal-500/10 border border-teal-500/30 text-teal-400">
+          <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gold/10 border border-gold/30 text-gold-light">
             {isSetup ? <Lock className="h-7 w-7" /> : <KeyRound className="h-7 w-7" />}
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-white">
+          <h1 className="text-2xl font-bold tracking-tight text-[#f5f3ef]">
             {isSetup ? 'Unlock FundPilot Vault' : isConfirming ? 'Confirm Your Master PIN' : 'Create Master PIN'}
           </h1>
-          <p className="mt-1 text-xs text-slate-400">
+          <p className="mt-1 text-xs text-[#9e9a93]">
             {isSetup
               ? 'Enter your PIN to decrypt local database with AES-GCM'
               : isConfirming
@@ -145,8 +145,8 @@ export function LockScreen() {
               key={idx}
               className={`h-4 w-4 rounded-full border transition-all duration-200 ${
                 idx < currentDisplayPin.length
-                  ? 'border-teal-400 bg-teal-400 shadow-[0_0_12px_rgba(45,212,191,0.6)]'
-                  : 'border-slate-700 bg-slate-800/50'
+                  ? 'border-gold-light bg-gold shadow-[0_0_12px_rgba(212,175,55,0.6)]'
+                  : 'border-[#262930] bg-[#171a21]'
               }`}
             />
           ))}
@@ -199,7 +199,7 @@ export function LockScreen() {
               type="button"
               disabled={isLoading}
               onClick={() => handleDigit(digit)}
-              className="flex h-14 items-center justify-center rounded-xl border border-slate-800 bg-slate-800/40 text-xl font-semibold text-slate-100 transition-all hover:border-slate-700 hover:bg-slate-800/80 active:scale-95 disabled:opacity-50"
+              className="flex h-14 items-center justify-center rounded-xl border border-[#262930] bg-[#171a21]/70 text-xl font-semibold text-[#f5f3ef] transition-all hover:border-gold/40 hover:bg-[#1e222b] active:scale-95 disabled:opacity-50"
             >
               {digit}
             </button>
@@ -215,7 +215,7 @@ export function LockScreen() {
               }
               setError(null);
             }}
-            className="flex h-14 items-center justify-center rounded-xl border border-slate-800 bg-slate-800/20 text-xs font-medium text-slate-400 hover:bg-slate-800/40"
+            className="flex h-14 items-center justify-center rounded-xl border border-[#262930] bg-[#171a21]/30 text-xs font-medium text-[#9e9a93] hover:bg-[#1e222b]/50"
           >
             Clear
           </button>
@@ -223,14 +223,14 @@ export function LockScreen() {
             type="button"
             disabled={isLoading}
             onClick={() => handleDigit('0')}
-            className="flex h-14 items-center justify-center rounded-xl border border-slate-800 bg-slate-800/40 text-xl font-semibold text-slate-100 transition-all hover:border-slate-700 hover:bg-slate-800/80 active:scale-95 disabled:opacity-50"
+            className="flex h-14 items-center justify-center rounded-xl border border-[#262930] bg-[#171a21]/70 text-xl font-semibold text-[#f5f3ef] transition-all hover:border-gold/40 hover:bg-[#1e222b] active:scale-95 disabled:opacity-50"
           >
             0
           </button>
           <button
             type="button"
             onClick={handleBackspace}
-            className="flex h-14 items-center justify-center rounded-xl border border-slate-800 bg-slate-800/20 text-sm font-medium text-slate-400 hover:bg-slate-800/40"
+            className="flex h-14 items-center justify-center rounded-xl border border-[#262930] bg-[#171a21]/30 text-sm font-medium text-[#9e9a93] hover:bg-[#1e222b]/50"
           >
             ⌫
           </button>
@@ -242,7 +242,7 @@ export function LockScreen() {
             type="button"
             disabled={isLoading || confirmPin.length < 4}
             onClick={handleSetupSubmit}
-            className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-teal-500 py-3 text-sm font-semibold text-slate-950 transition-all hover:bg-teal-400 disabled:opacity-50"
+            className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-gold to-gold-light py-3 text-sm font-semibold text-[#0b0d10] shadow-[0_0_20px_rgba(212,175,55,0.3)] transition-all hover:brightness-110 disabled:opacity-50"
           >
             <CheckCircle2 className="h-4 w-4" />
             Confirm & Initialize Vault
@@ -250,9 +250,9 @@ export function LockScreen() {
         )}
 
         {/* Security Warning Guarantee */}
-        <div className="mt-6 border-t border-slate-800/60 pt-4 text-center">
-          <p className="flex items-center justify-center gap-1.5 text-[11px] text-slate-500">
-            <ShieldAlert className="h-3.5 w-3.5 text-amber-400/80" />
+        <div className="mt-6 border-t border-[#262930]/60 pt-4 text-center">
+          <p className="flex items-center justify-center gap-1.5 text-[11px] text-[#9e9a93]">
+            <ShieldAlert className="h-3.5 w-3.5 text-gold-light" />
             <span>Wrong PIN = No access, no recovery path by design.</span>
           </p>
         </div>
