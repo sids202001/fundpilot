@@ -1,25 +1,17 @@
-// CSV Parsers for Bank Statements & Brokerage Accounts
-// Automatically maps columns, strictly reports unparsed rows instead of guessing
+// CSV Parsers for Bank Statements
+// Automatically maps columns, strictly reports unparsed rows instead of guessing.
+// Every imported row generates a dedupKey to prevent duplicate entries on re-import.
+// Broker CSV import is deleted with the portfolio module.
 
-import { Expense, Holding, TaxLot, CategoryRule } from './types';
+import { Expense, CategoryRule } from './types';
 import { categorizeMerchant } from './aiCategorizer';
 
 export interface BankCSVResult {
-  expenses: Omit<Expense, 'id' | 'createdAt'>[];
+  expenses: Omit<Expense, 'id' | 'createdAt' | 'updatedAt'>[];
   unparsedRows: Array<{ rowNumber: number; rawText: string; reason: string }>;
   detectedFormat: 'Chase' | 'Bank of America' | 'American Express' | 'Generic CSV';
-}
-
-export interface BrokerCSVResult {
-  holdings: Array<{
-    ticker: string;
-    shares: number;
-    costPerShareCents: number;
-    totalCostCents: number;
-    date: string;
-  }>;
-  unparsedRows: Array<{ rowNumber: number; rawText: string; reason: string }>;
-  detectedBroker: 'Robinhood' | 'Schwab' | 'Fidelity' | 'Generic Broker';
+  newCount: number;
+  duplicateCount: number;
 }
 
 // Basic robust CSV line splitter that respects quoted commas
@@ -43,21 +35,70 @@ function parseCSVLine(line: string): string[] {
   return result;
 }
 
+// Format local date string from MM/DD/YYYY or YYYY-MM-DD
+export function normalizeLocalDateString(dateInput: string): string {
+  const clean = dateInput.trim();
+  // Check MM/DD/YYYY
+  const mdy = clean.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (mdy) {
+    const m = mdy[1].padStart(2, '0');
+    const d = mdy[2].padStart(2, '0');
+    const y = mdy[3];
+    return `${y}-${m}-${d}`;
+  }
+  // Check YYYY-MM-DD
+  const ymd = clean.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/);
+  if (ymd) {
+    const y = ymd[1];
+    const m = ymd[2].padStart(2, '0');
+    const d = ymd[3].padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  // Fallback to local date parsing
+  const parsed = new Date(clean);
+  if (!isNaN(parsed.getTime())) {
+    const y = parsed.getFullYear();
+    const m = String(parsed.getMonth() + 1).padStart(2, '0');
+    const d = String(parsed.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  return clean;
+}
+
+// Simple deterministic hash for dedupKey
+export function computeDedupKey(date: string, merchant: string, amountCents: number, rowNum: number): string {
+  const input = `${date}|${merchant.toLowerCase().trim()}|${amountCents}|${rowNum}`;
+  let hash = 0;
+  for (let i = 0; i < input.length; i++) {
+    const char = input.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash |= 0;
+  }
+  return `dedup-${Math.abs(hash).toString(16)}-${rowNum}`;
+}
+
 // Parse Bank Statement CSV
-export function parseBankCSV(csvText: string, userRules: CategoryRule[] = []): BankCSVResult {
+export function parseBankCSV(
+  csvText: string,
+  userRules: CategoryRule[] = [],
+  existingExpenses: Expense[] = [],
+  accountId?: string,
+  defaultCurrency: string = 'USD'
+): BankCSVResult {
   const lines = csvText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   if (lines.length < 2) {
     return {
       expenses: [],
       unparsedRows: [{ rowNumber: 1, rawText: csvText, reason: 'File contains no data rows' }],
       detectedFormat: 'Generic CSV',
+      newCount: 0,
+      duplicateCount: 0,
     };
   }
 
   const header = parseCSVLine(lines[0].toLowerCase());
   let format: BankCSVResult['detectedFormat'] = 'Generic CSV';
 
-  // Format detection
   let dateIdx = -1;
   let descIdx = -1;
   let amountIdx = -1;
@@ -78,7 +119,6 @@ export function parseBankCSV(csvText: string, userRules: CategoryRule[] = []): B
     descIdx = header.indexOf('description');
     amountIdx = header.indexOf('amount');
   } else {
-    // Dynamic column matching
     dateIdx = header.findIndex((h) => h.includes('date'));
     descIdx = header.findIndex((h) => h.includes('desc') || h.includes('merchant') || h.includes('payee') || h.includes('name'));
     amountIdx = header.findIndex((h) => h.includes('amount') || h.includes('total') || h.includes('debit'));
@@ -89,188 +129,100 @@ export function parseBankCSV(csvText: string, userRules: CategoryRule[] = []): B
       expenses: [],
       unparsedRows: [{ rowNumber: 1, rawText: lines[0], reason: 'Missing required columns (Date, Description, Amount)' }],
       detectedFormat: format,
+      newCount: 0,
+      duplicateCount: 0,
     };
   }
 
-  const expenses: Omit<Expense, 'id' | 'createdAt'>[] = [];
+  // Build existing dedup set
+  const existingDedupKeys = new Set<string>();
+  const existingTriplets = new Set<string>();
+  for (const exp of existingExpenses) {
+    if (exp.dedupKey) existingDedupKeys.add(exp.dedupKey);
+    // Also track date + merchant + amount triplet
+    existingTriplets.add(`${exp.date}|${exp.merchant.toLowerCase().trim()}|${exp.amountCents}`);
+  }
+
+  const expenses: Omit<Expense, 'id' | 'createdAt' | 'updatedAt'>[] = [];
   const unparsedRows: BankCSVResult['unparsedRows'] = [];
+  let duplicateCount = 0;
 
   for (let i = 1; i < lines.length; i++) {
     const rawLine = lines[i];
     const cols = parseCSVLine(rawLine);
 
     if (cols.length <= Math.max(dateIdx, descIdx, amountIdx)) {
-      unparsedRows.push({ rowNumber: i + 1, rawText: rawLine, reason: 'Insufficient column count' });
+      unparsedRows.push({ rowNumber: i + 1, rawText: rawLine, reason: 'Row has fewer columns than header' });
       continue;
     }
 
     const rawDate = cols[dateIdx];
     const rawDesc = cols[descIdx];
-    const rawAmt = cols[amountIdx].replace(/[$,\s]/g, '');
+    const rawAmt = cols[amountIdx].replace(/[$,]/g, '').trim();
 
-    // Validate date
-    let dateStr = '';
-    try {
-      const d = new Date(rawDate);
-      if (isNaN(d.getTime())) {
-        unparsedRows.push({ rowNumber: i + 1, rawText: rawLine, reason: `Invalid date format: ${rawDate}` });
-        continue;
-      }
-      dateStr = d.toISOString().split('T')[0];
-    } catch (e) {
-      unparsedRows.push({ rowNumber: i + 1, rawText: rawLine, reason: `Unparseable date: ${rawDate}` });
+    if (!rawDate || !rawDesc || !rawAmt) {
+      unparsedRows.push({ rowNumber: i + 1, rawText: rawLine, reason: 'Empty required field' });
       continue;
     }
 
-    // Validate amount
-    const parsedNum = parseFloat(rawAmt);
-    if (isNaN(parsedNum)) {
-      unparsedRows.push({ rowNumber: i + 1, rawText: rawLine, reason: `Invalid numeric amount: ${rawAmt}` });
+    const normalizedDate = normalizeLocalDateString(rawDate);
+    const num = parseFloat(rawAmt);
+    if (isNaN(num)) {
+      unparsedRows.push({ rowNumber: i + 1, rawText: rawLine, reason: `Invalid amount number: ${rawAmt}` });
       continue;
     }
 
-    // Expenses are typically negative or debit, normalize to positive expense amount in cents
-    const absCents = Math.round(Math.abs(parsedNum) * 100);
-    if (absCents === 0) continue; // Skip zero-dollar rows
+    const absAmountCents = Math.round(Math.abs(num) * 100);
+    if (absAmountCents === 0) {
+      unparsedRows.push({ rowNumber: i + 1, rawText: rawLine, reason: 'Zero dollar amount' });
+      continue;
+    }
 
-    // Categorize
-    const catResult = categorizeMerchant(rawDesc, userRules);
+    // Money-in vs Money-out (entryType)
+    // In credit card or bank statements, negative amounts typically denote debits (charges) while positive denote payments/credits
+    // In some exports positive is charge, negative is refund
+    // If format is Chase/BoA/Amex, negative is debit
+    let entryType: 'debit' | 'credit' = num < 0 ? 'debit' : 'credit';
+    if (format === 'American Express' && num > 0) {
+      // Amex lists positive for charges
+      entryType = 'debit';
+    }
 
-    const isCreditCard = format === 'American Express';
-    const entryType: 'debit' | 'credit' = isCreditCard
-      ? (parsedNum > 0 ? 'debit' : 'credit')
-      : (parsedNum < 0 ? 'debit' : 'credit');
-    const accountType: 'bank' | 'credit' | 'cash' = isCreditCard ? 'credit' : 'bank';
+    const cleanMerchant = rawDesc.replace(/\s+/g, ' ').trim();
+    const dedupKey = computeDedupKey(normalizedDate, cleanMerchant, absAmountCents, i);
+    const triplet = `${normalizedDate}|${cleanMerchant.toLowerCase().trim()}|${absAmountCents}`;
+
+    // Dedup check: Skip if already exists
+    if (existingDedupKeys.has(dedupKey) || existingTriplets.has(triplet)) {
+      duplicateCount++;
+      continue;
+    }
+
+    // Classify category using deterministic rules
+    const cat = categorizeMerchant(cleanMerchant, userRules);
 
     expenses.push({
-      amountCents: absCents,
-      merchant: rawDesc,
-      category: catResult.category,
-      date: dateStr,
+      merchant: cleanMerchant,
+      amountCents: absAmountCents,
+      currency: defaultCurrency,
+      category: cat.category,
+      date: normalizedDate,
       source: 'csv',
-      confidence: catResult.confidence,
-      accountType,
+      accountId,
       entryType,
+      confidence: cat.confidence,
+      dedupKey,
+      notes: `Imported via ${format} statement (Row ${i + 1})`,
     });
+
+    existingTriplets.add(triplet);
   }
 
   return {
     expenses,
     unparsedRows,
     detectedFormat: format,
-  };
-}
-
-// Parse Brokerage CSV (Robinhood, Schwab, Fidelity)
-export function parseBrokerCSV(csvText: string): BrokerCSVResult {
-  const lines = csvText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  if (lines.length < 2) {
-    return {
-      holdings: [],
-      unparsedRows: [{ rowNumber: 1, rawText: csvText, reason: 'Empty file or header only' }],
-      detectedBroker: 'Generic Broker',
-    };
-  }
-
-  const header = parseCSVLine(lines[0].toLowerCase());
-  let broker: BrokerCSVResult['detectedBroker'] = 'Generic Broker';
-
-  let tickerIdx = -1;
-  let sharesIdx = -1;
-  let priceIdx = -1;
-  let dateIdx = -1;
-
-  if (header.includes('instrument') && header.includes('trans code')) {
-    broker = 'Robinhood';
-    tickerIdx = header.indexOf('instrument');
-    sharesIdx = header.indexOf('quantity');
-    priceIdx = header.indexOf('price');
-    dateIdx = header.indexOf('activity date');
-  } else if (header.includes('fees & comm')) {
-    broker = 'Schwab';
-    tickerIdx = header.indexOf('symbol');
-    sharesIdx = header.indexOf('quantity');
-    priceIdx = header.indexOf('price');
-    dateIdx = header.indexOf('date');
-  } else if (header.includes('run date') || header.includes('security description')) {
-    broker = 'Fidelity';
-    tickerIdx = header.indexOf('symbol');
-    sharesIdx = header.indexOf('quantity');
-    priceIdx = header.indexOf('price ($)') !== -1 ? header.indexOf('price ($)') : header.indexOf('price');
-    dateIdx = header.indexOf('run date');
-  } else {
-    tickerIdx = header.findIndex((h) => h.includes('symbol') || h.includes('ticker') || h.includes('instrument'));
-    sharesIdx = header.findIndex((h) => h.includes('qty') || h.includes('quantity') || h.includes('shares'));
-    priceIdx = header.findIndex((h) => h.includes('price') || h.includes('cost'));
-    dateIdx = header.findIndex((h) => h.includes('date'));
-  }
-
-  if (tickerIdx === -1 || sharesIdx === -1 || priceIdx === -1) {
-    return {
-      holdings: [],
-      unparsedRows: [{ rowNumber: 1, rawText: lines[0], reason: 'Missing essential columns (Ticker/Symbol, Shares/Quantity, Price)' }],
-      detectedBroker: broker,
-    };
-  }
-
-  const holdings: BrokerCSVResult['holdings'] = [];
-  const unparsedRows: BrokerCSVResult['unparsedRows'] = [];
-
-  for (let i = 1; i < lines.length; i++) {
-    const rawLine = lines[i];
-    const cols = parseCSVLine(rawLine);
-
-    if (cols.length <= Math.max(tickerIdx, sharesIdx, priceIdx)) {
-      unparsedRows.push({ rowNumber: i + 1, rawText: rawLine, reason: 'Insufficient column count' });
-      continue;
-    }
-
-    const rawTicker = cols[tickerIdx].toUpperCase().trim();
-    const rawShares = parseFloat(cols[sharesIdx].replace(/[$,\s]/g, ''));
-    const rawPrice = parseFloat(cols[priceIdx].replace(/[$,\s]/g, ''));
-
-    if (!rawTicker || rawTicker.length < 1 || rawTicker.length > 10) {
-      unparsedRows.push({ rowNumber: i + 1, rawText: rawLine, reason: `Invalid ticker symbol: ${rawTicker}` });
-      continue;
-    }
-
-    if (isNaN(rawShares) || rawShares <= 0) {
-      unparsedRows.push({ rowNumber: i + 1, rawText: rawLine, reason: `Invalid share count: ${cols[sharesIdx]}` });
-      continue;
-    }
-
-    if (isNaN(rawPrice) || rawPrice <= 0) {
-      unparsedRows.push({ rowNumber: i + 1, rawText: rawLine, reason: `Invalid price: ${cols[priceIdx]}` });
-      continue;
-    }
-
-    let dateStr = new Date().toISOString().split('T')[0];
-    if (dateIdx !== -1 && cols[dateIdx]) {
-      try {
-        const d = new Date(cols[dateIdx]);
-        if (!isNaN(d.getTime())) {
-          dateStr = d.toISOString().split('T')[0];
-        }
-      } catch (e) {
-        // use today
-      }
-    }
-
-    const costPerShareCents = Math.round(rawPrice * 100);
-    const totalCostCents = Math.round(rawShares * costPerShareCents);
-
-    holdings.push({
-      ticker: rawTicker,
-      shares: rawShares,
-      costPerShareCents,
-      totalCostCents,
-      date: dateStr,
-    });
-  }
-
-  return {
-    holdings,
-    unparsedRows,
-    detectedBroker: broker,
+    newCount: expenses.length,
+    duplicateCount,
   };
 }

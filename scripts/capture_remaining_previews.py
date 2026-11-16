@@ -3,7 +3,7 @@ import os
 import shutil
 from playwright.async_api import async_playwright
 
-ARTIFACT_DIR = "/Users/siddheshsawant/.gemini/antigravity-cli/brain/3c307a80-2bb9-4579-be27-19c81e59c5cc"
+ARTIFACT_DIR = os.environ.get("ARTIFACT_DIR", "/tmp/fundpilot_screenshots")
 
 def log(msg):
     print(msg, flush=True)

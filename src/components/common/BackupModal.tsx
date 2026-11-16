@@ -71,7 +71,7 @@ export function BackupModal({ isOpen, onClose }: { isOpen: boolean; onClose: () 
 
   // Handle CSV Exports
   const handleExportCSV = () => {
-    const { expensesCSV, fundsCSV, holdingsCSV } = exportCSVData();
+    const { expensesCSV, fundsCSV, investmentsCSV, accountsCSV } = exportCSVData();
 
     // Download combined or zip/individual
     const downloadBlob = (content: string, filename: string) => {
@@ -87,7 +87,8 @@ export function BackupModal({ isOpen, onClose }: { isOpen: boolean; onClose: () 
     const dateStr = new Date().toISOString().split('T')[0];
     downloadBlob(expensesCSV, `fundpilot_expenses_${dateStr}.csv`);
     downloadBlob(fundsCSV, `fundpilot_funds_${dateStr}.csv`);
-    downloadBlob(holdingsCSV, `fundpilot_holdings_${dateStr}.csv`);
+    downloadBlob(investmentsCSV, `fundpilot_investments_${dateStr}.csv`);
+    downloadBlob(accountsCSV, `fundpilot_accounts_${dateStr}.csv`);
   };
 
   // Wipe All Data
@@ -164,40 +165,7 @@ export function BackupModal({ isOpen, onClose }: { isOpen: boolean; onClose: () 
             </button>
           </div>
 
-          {/* Section 3: Cloud LLM Opt-in Warning */}
-          <div className="rounded-xl border border-[#262930] bg-[#0b0d10]/60 p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h4 className="text-xs font-semibold text-[#f5f3ef]">Cloud LLM Opt-In</h4>
-                <p className="mt-0.5 text-[11px] text-[#9e9a93]">
-                  Default is 100% on-device AI. Remote LLM sends merchant queries off-device.
-                </p>
-              </div>
-              <input
-                type="checkbox"
-                checked={settings.cloudLlmOptIn}
-                onChange={(e) => {
-                  if (e.target.checked) {
-                    const confirmLeave = confirm(
-                      'PRIVACY NOTICE: Enabling Cloud LLM will transmit expense merchant strings to remote LLM servers. All other storage remains encrypted locally. Proceed?'
-                    );
-                    if (confirmLeave) {
-                      updateSettings({ cloudLlmOptIn: true });
-                    }
-                  } else {
-                    updateSettings({ cloudLlmOptIn: false });
-                  }
-                }}
-                className="h-4 w-4 rounded border-[#262930] bg-[#171a21] text-gold focus:ring-gold"
-              />
-            </div>
-            {settings.cloudLlmOptIn && (
-              <div className="mt-2 flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2 text-[10px] text-amber-300">
-                <AlertTriangle className="h-3 w-3 shrink-0" />
-                <span>Notice: Cloud LLM enabled. Data leaves device only for explicit remote categorization queries.</span>
-              </div>
-            )}
-          </div>
+
 
           {/* Section 4: Wipe Everything */}
           <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-4">

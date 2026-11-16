@@ -13,25 +13,23 @@ import {
   Lock,
   Wifi,
   WifiOff,
-  Database,
+  Settings,
   Coins,
 } from 'lucide-react';
 
+export type AppNavTab = 'dashboard' | 'expenses' | 'funds' | 'investments' | 'settings';
+
 interface NavbarProps {
-  activeTab: 'dashboard' | 'expenses' | 'funds' | 'portfolio';
-  setActiveTab: (tab: 'dashboard' | 'expenses' | 'funds' | 'portfolio') => void;
-  openBackupModal: () => void;
+  activeTab: AppNavTab;
+  setActiveTab: (tab: AppNavTab) => void;
+  openSettingsModal?: () => void;
 }
 
-export function Navbar({ activeTab, setActiveTab, openBackupModal }: NavbarProps) {
-  const { lockVault, settings, updateSettings, fxRate, isOffline } = useStore();
+export function Navbar({ activeTab, setActiveTab }: NavbarProps) {
+  const { lockVault, settings, updateSettings, fxRate, isOffline, displayCurrency } = useStore();
 
   const toggle2D = () => {
     updateSettings({ prefer2D: !settings.prefer2D });
-  };
-
-  const toggleReducedMotion = () => {
-    updateSettings({ useReducedMotion: !settings.useReducedMotion });
   };
 
   return (
@@ -53,7 +51,7 @@ export function Navbar({ activeTab, setActiveTab, openBackupModal }: NavbarProps
           </div>
         </div>
 
-        {/* Navigation Tabs */}
+        {/* Navigation Tabs (Desktop) */}
         <nav className="hidden md:flex items-center gap-1 rounded-xl border border-[#1e222b] bg-[#111419]/75 p-1">
           <button
             onClick={() => setActiveTab('dashboard')}
@@ -89,15 +87,26 @@ export function Navbar({ activeTab, setActiveTab, openBackupModal }: NavbarProps
             Sinking Funds
           </button>
           <button
-            onClick={() => setActiveTab('portfolio')}
+            onClick={() => setActiveTab('investments')}
             className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
-              activeTab === 'portfolio'
+              activeTab === 'investments'
                 ? 'bg-[#d4af37]/15 text-[#f3d99b] border border-[#d4af37]/35 shadow-sm'
                 : 'text-[#9e9a93] hover:text-[#f5f3ef] hover:bg-[#1a1d24]'
             }`}
           >
             <TrendingUp className="h-4 w-4" />
-            Portfolio
+            Investments
+          </button>
+          <button
+            onClick={() => setActiveTab('settings')}
+            className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
+              activeTab === 'settings'
+                ? 'bg-[#d4af37]/15 text-[#f3d99b] border border-[#d4af37]/35 shadow-sm'
+                : 'text-[#9e9a93] hover:text-[#f5f3ef] hover:bg-[#1a1d24]'
+            }`}
+          >
+            <Settings className="h-4 w-4" />
+            Settings
           </button>
         </nav>
 
@@ -128,7 +137,7 @@ export function Navbar({ activeTab, setActiveTab, openBackupModal }: NavbarProps
 
           {/* Offline / Online Pill */}
           <div
-            title={isOffline ? 'Offline Mode (Local Cache Active)' : 'Online (Free Proxies Active)'}
+            title={isOffline ? 'Offline Mode (Local Cache Active)' : 'Online Mode'}
             className={`flex items-center rounded-lg border p-1.5 text-xs ${
               isOffline
                 ? 'border-amber-500/30 bg-amber-500/10 text-amber-400'
@@ -138,13 +147,13 @@ export function Navbar({ activeTab, setActiveTab, openBackupModal }: NavbarProps
             {isOffline ? <WifiOff className="h-3.5 w-3.5" /> : <Wifi className="h-3.5 w-3.5" />}
           </div>
 
-          {/* Backup & Storage */}
+          {/* Settings Tab Shortcut */}
           <button
-            onClick={openBackupModal}
-            title="Encrypted Backup, CSV Export & Data Settings"
+            onClick={() => setActiveTab('settings')}
+            title="Settings & Backup"
             className="flex items-center rounded-lg border border-[#1e222b] bg-[#111419]/75 p-1.5 text-[#9e9a93] hover:border-[#d4af37]/40 hover:text-white transition-colors"
           >
-            <Database className="h-3.5 w-3.5" />
+            <Settings className="h-3.5 w-3.5" />
           </button>
 
           {/* Lock Vault */}
@@ -189,13 +198,22 @@ export function Navbar({ activeTab, setActiveTab, openBackupModal }: NavbarProps
           Funds
         </button>
         <button
-          onClick={() => setActiveTab('portfolio')}
+          onClick={() => setActiveTab('investments')}
           className={`flex flex-col items-center gap-0.5 py-1 text-[11px] font-medium ${
-            activeTab === 'portfolio' ? 'text-[#d4af37]' : 'text-[#9e9a93]'
+            activeTab === 'investments' ? 'text-[#d4af37]' : 'text-[#9e9a93]'
           }`}
         >
           <TrendingUp className="h-4 w-4" />
-          Portfolio
+          Investments
+        </button>
+        <button
+          onClick={() => setActiveTab('settings')}
+          className={`flex flex-col items-center gap-0.5 py-1 text-[11px] font-medium ${
+            activeTab === 'settings' ? 'text-[#d4af37]' : 'text-[#9e9a93]'
+          }`}
+        >
+          <Settings className="h-4 w-4" />
+          Settings
         </button>
       </div>
     </header>

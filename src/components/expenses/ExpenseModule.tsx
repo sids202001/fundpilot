@@ -1,19 +1,19 @@
 'use client';
 
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useStore } from '@/lib/store';
-import { Expense, TransactionSource, CategoryRule } from '@/lib/types';
+import { Expense, ExpenseItem, CategoryRule, CustomCategory } from '@/lib/types';
 import { STANDARD_CATEGORIES, categorizeMerchant } from '@/lib/aiCategorizer';
 import { parseVoiceExpense } from '@/lib/voice';
 import { performReceiptOCR, parseReceiptText, ParsedReceipt } from '@/lib/ocr';
 import { parseBankCSV, BankCSVResult } from '@/lib/csvParsers';
 import { detectSubscriptions, detectAnomalies } from '@/lib/subscriptionDetector';
+import { formatMoney, SUPPORTED_CURRENCIES } from '@/lib/currencies';
 import {
   Plus,
   Mic,
   Camera,
   Upload,
-  Sparkles,
   AlertTriangle,
   RefreshCw,
   Search,
@@ -25,24 +25,39 @@ import {
   TrendingUp,
   Tag,
   Trash2,
+  Edit2,
   FileText,
-  Volume2,
+  ChevronDown,
+  ChevronUp,
+  Coins,
+  X,
 } from 'lucide-react';
 
 export function ExpenseModule({ filterCategory }: { filterCategory?: string | null }) {
   const {
     expenses,
     addExpense,
+    updateExpense,
+    deleteExpense,
     categoryRules,
     addCategoryRule,
+    deleteCategoryRule,
     budgets,
     setCategoryBudget,
+    deleteCategoryBudget,
+    customCategories,
+    addCustomCategory,
+    renameCustomCategory,
+    deleteCustomCategory,
+    accounts,
+    displayCurrency,
+    rates,
   } = useStore();
 
   const [activeSubTab, setActiveSubTab] = useState<'list' | 'subscriptions' | 'budgets' | 'rules'>('list');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>(filterCategory || 'ALL');
-  const [selectedAccountFilter, setSelectedAccountFilter] = useState<'ALL' | 'bank' | 'credit' | 'cash'>('ALL');
+  const [selectedAccountFilter, setSelectedAccountFilter] = useState<string>('ALL');
 
   // Modals
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
@@ -51,29 +66,62 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
   const [isCSVModalOpen, setIsCSVModalOpen] = useState(false);
   const [categoryRulePrompt, setCategoryRulePrompt] = useState<{ merchant: string; category: string } | null>(null);
 
+  // Edit / Delete Expense State
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+  const [deleteConfirmExpense, setDeleteConfirmExpense] = useState<Expense | null>(null);
+  const [expandedExpenseId, setExpandedExpenseId] = useState<string | null>(null);
+
   // Manual Form State
   const [manualMerchant, setManualMerchant] = useState('');
   const [manualAmount, setManualAmount] = useState('');
+  const [manualCurrency, setManualCurrency] = useState(displayCurrency || 'USD');
   const [manualCategory, setManualCategory] = useState('Groceries');
   const [manualDate, setManualDate] = useState(new Date().toISOString().split('T')[0]);
   const [manualNotes, setManualNotes] = useState('');
-  const [manualAccountType, setManualAccountType] = useState<'bank' | 'credit' | 'cash'>('bank');
+  const [manualAccountId, setManualAccountId] = useState<string>(accounts[0]?.id || '');
   const [manualEntryType, setManualEntryType] = useState<'debit' | 'credit'>('debit');
+
+  // Edit Expense Form State
+  const [editMerchant, setEditMerchant] = useState('');
+  const [editAmount, setEditAmount] = useState('');
+  const [editCurrency, setEditCurrency] = useState('USD');
+  const [editCategory, setEditCategory] = useState('Groceries');
+  const [editDate, setEditDate] = useState('');
+  const [editNotes, setEditNotes] = useState('');
+  const [editAccountId, setEditAccountId] = useState('');
+  const [editEntryType, setEditEntryType] = useState<'debit' | 'credit'>('debit');
 
   // Voice State
   const [voiceTranscript, setVoiceTranscript] = useState('');
   const [isListening, setIsListening] = useState(false);
   const [voiceParsed, setVoiceParsed] = useState<ReturnType<typeof parseVoiceExpense>>(null);
 
-  // Receipt OCR State
+  // Receipt OCR State (Fix 8: Editable line items, tax, total + strict reconciliation gate)
   const [receiptImage, setReceiptImage] = useState<string | null>(null);
   const [receiptTextPasted, setReceiptTextPasted] = useState('');
   const [isOcrProcessing, setIsOcrProcessing] = useState(false);
-  const [parsedReceipt, setParsedReceipt] = useState<ParsedReceipt | null>(null);
+  const [ocrMerchant, setOcrMerchant] = useState('');
+  const [ocrDate, setOcrDate] = useState(new Date().toISOString().split('T')[0]);
+  const [ocrCurrency, setOcrCurrency] = useState(displayCurrency || 'USD');
+  const [ocrAccountId, setOcrAccountId] = useState<string>(accounts[0]?.id || '');
+  const [ocrTaxInput, setOcrTaxInput] = useState('0.00');
+  const [ocrTotalInput, setOcrTotalInput] = useState('0.00');
+  const [ocrItems, setOcrItems] = useState<ExpenseItem[]>([]);
+  const [hasParsedReceipt, setHasParsedReceipt] = useState(false);
 
   // CSV Import State
   const [csvContent, setCsvContent] = useState('');
   const [csvResult, setCsvResult] = useState<BankCSVResult | null>(null);
+
+  // Custom Category State
+  const [newCatName, setNewCatName] = useState('');
+  const [editingCatId, setEditingCatId] = useState<string | null>(null);
+  const [editingCatName, setEditingCatName] = useState('');
+
+  // Combined Category List
+  const allCategories = useMemo(() => {
+    return [...STANDARD_CATEGORIES, ...customCategories.map((c) => c.name)];
+  }, [customCategories]);
 
   // Subscriptions & Anomalies
   const subscriptions = useMemo(() => detectSubscriptions(expenses), [expenses]);
@@ -104,7 +152,8 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
       const matchCategory =
         selectedCategoryFilter === 'ALL' || e.category === selectedCategoryFilter;
       const matchAccount =
-        selectedAccountFilter === 'ALL' || (e.accountType || 'bank') === selectedAccountFilter;
+        selectedAccountFilter === 'ALL' ||
+        (e.accountId && e.accountId === selectedAccountFilter);
       return matchSearch && matchCategory && matchAccount;
     });
   }, [expenses, searchQuery, selectedCategoryFilter, selectedAccountFilter]);
@@ -133,12 +182,13 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
     await addExpense({
       merchant: manualMerchant.trim(),
       amountCents,
+      currency: manualCurrency,
       category: manualCategory || cat.category,
       date: manualDate,
       source: 'manual',
       confidence: cat.confidence,
       notes: manualNotes.trim() || undefined,
-      accountType: manualAccountType,
+      accountId: manualAccountId || undefined,
       entryType: manualEntryType,
     });
 
@@ -146,6 +196,69 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
     setManualAmount('');
     setManualNotes('');
     setIsManualModalOpen(false);
+  };
+
+  // Edit Expense Handlers
+  const handleStartEdit = (exp: Expense) => {
+    setEditingExpense(exp);
+    setEditMerchant(exp.merchant);
+    setEditAmount((exp.amountCents / 100).toFixed(2));
+    setEditCurrency(exp.currency || 'USD');
+    setEditCategory(exp.category);
+    setEditDate(exp.date);
+    setEditNotes(exp.notes || '');
+    setEditAccountId(exp.accountId || '');
+    setEditEntryType(exp.entryType || 'debit');
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingExpense) return;
+    const dollars = parseFloat(editAmount);
+    if (!editMerchant || isNaN(dollars) || dollars <= 0) return;
+
+    const amountCents = Math.round(dollars * 100);
+    await updateExpense(editingExpense.id, {
+      merchant: editMerchant.trim(),
+      amountCents,
+      currency: editCurrency,
+      category: editCategory,
+      date: editDate,
+      notes: editNotes.trim() || undefined,
+      accountId: editAccountId || undefined,
+      entryType: editEntryType,
+    });
+
+    setEditingExpense(null);
+  };
+
+  // Delete Expense Handler
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirmExpense) return;
+    await deleteExpense(deleteConfirmExpense.id);
+    setDeleteConfirmExpense(null);
+  };
+
+  // FIX 19: Category Correction Bug Fix
+  // Changing a transaction's category must update THAT transaction immediately
+  // AND THEN offer to save a rule for future imports.
+  const handleCategoryChange = async (exp: Expense, newCat: string) => {
+    if (newCat === exp.category) return;
+
+    // 1. Immediately update THAT transaction in the store
+    await updateExpense(exp.id, { category: newCat });
+
+    // 2. Offer to save a global rule for future transactions with this merchant
+    setCategoryRulePrompt({
+      merchant: exp.merchant,
+      category: newCat,
+    });
+  };
+
+  const confirmCreateRule = async () => {
+    if (!categoryRulePrompt) return;
+    await addCategoryRule(categoryRulePrompt.merchant, categoryRulePrompt.category);
+    setCategoryRulePrompt(null);
   };
 
   // Voice Speech Recognition Handler
@@ -190,12 +303,12 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
     await addExpense({
       merchant: voiceParsed.merchant,
       amountCents: voiceParsed.amountCents,
+      currency: displayCurrency || 'USD',
       category: voiceParsed.category,
       date: new Date().toISOString().split('T')[0],
       source: 'voice',
       confidence: voiceParsed.confidence,
       notes: `Voice input: "${voiceParsed.transcript}"`,
-      accountType: 'bank',
       entryType: 'debit',
     });
     setVoiceTranscript('');
@@ -203,12 +316,22 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
     setIsVoiceModalOpen(false);
   };
 
-  // Receipt OCR Handler
+  // Receipt OCR Handler (Fix 8: Editable fields + Reconciliation Gate)
+  const populateOcrState = (parsed: ParsedReceipt) => {
+    setOcrMerchant(parsed.merchant || 'Store');
+    setOcrDate(parsed.date || new Date().toISOString().split('T')[0]);
+    setOcrCurrency(parsed.currency || displayCurrency || 'USD');
+    setOcrTaxInput((parsed.taxCents / 100).toFixed(2));
+    setOcrTotalInput((parsed.totalCents / 100).toFixed(2));
+    setOcrItems(parsed.items.map((it) => ({ name: it.name, amountCents: it.amountCents })));
+    setHasParsedReceipt(true);
+  };
+
   const handleReceiptUpload = async (file: File) => {
     setIsOcrProcessing(true);
     try {
       const res = await performReceiptOCR(file);
-      setParsedReceipt(res);
+      populateOcrState(res);
     } catch (err) {
       alert('Client OCR failed to process image. You can paste receipt text directly.');
     } finally {
@@ -219,24 +342,48 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
   const handleReceiptTextParse = () => {
     if (!receiptTextPasted.trim()) return;
     const res = parseReceiptText(receiptTextPasted);
-    setParsedReceipt(res);
+    populateOcrState(res);
   };
 
+  // OCR Reconciliation calculations
+  const ocrItemsSumCents = useMemo(() => {
+    return ocrItems.reduce((sum, it) => sum + (it.amountCents || 0), 0);
+  }, [ocrItems]);
+
+  const ocrTaxCents = useMemo(() => {
+    const val = parseFloat(ocrTaxInput);
+    return isNaN(val) ? 0 : Math.round(val * 100);
+  }, [ocrTaxInput]);
+
+  const ocrTotalCents = useMemo(() => {
+    const val = parseFloat(ocrTotalInput);
+    return isNaN(val) ? 0 : Math.round(val * 100);
+  }, [ocrTotalInput]);
+
+  const isOcrReconciled = useMemo(() => {
+    return ocrItemsSumCents + ocrTaxCents === ocrTotalCents && ocrTotalCents > 0;
+  }, [ocrItemsSumCents, ocrTaxCents, ocrTotalCents]);
+
   const confirmReceiptExpense = async () => {
-    if (!parsedReceipt || parsedReceipt.totalCents <= 0) return;
-    const cat = categorizeMerchant(parsedReceipt.merchant, categoryRules);
+    if (!isOcrReconciled || ocrTotalCents <= 0) return;
+    const cat = categorizeMerchant(ocrMerchant, categoryRules);
+
     await addExpense({
-      merchant: parsedReceipt.merchant,
-      amountCents: parsedReceipt.totalCents,
+      merchant: ocrMerchant.trim(),
+      amountCents: ocrTotalCents,
+      currency: ocrCurrency,
       category: cat.category,
-      date: parsedReceipt.date,
+      date: ocrDate,
       source: 'receipt',
-      confidence: parsedReceipt.confidence,
-      notes: `Receipt OCR: ${parsedReceipt.items.length} items parsed. Subtotal $${(parsedReceipt.subtotalCents / 100).toFixed(2)}, Tax $${(parsedReceipt.taxCents / 100).toFixed(2)}`,
-      accountType: 'bank',
+      confidence: 0.95,
+      notes: `Receipt OCR: ${ocrItems.length} items. Subtotal $${(ocrItemsSumCents / 100).toFixed(2)}, Tax $${(ocrTaxCents / 100).toFixed(2)}`,
+      accountId: ocrAccountId || undefined,
       entryType: 'debit',
+      items: ocrItems,
     });
-    setParsedReceipt(null);
+
+    setHasParsedReceipt(false);
+    setOcrItems([]);
     setReceiptTextPasted('');
     setIsReceiptModalOpen(false);
   };
@@ -258,28 +405,13 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
     setIsCSVModalOpen(false);
   };
 
-  // User Category Correction Rule Learning
-  const handleCategoryChange = (exp: Expense, newCat: string) => {
-    if (newCat === exp.category) return;
-    setCategoryRulePrompt({
-      merchant: exp.merchant,
-      category: newCat,
-    });
-  };
-
-  const confirmCreateRule = async () => {
-    if (!categoryRulePrompt) return;
-    await addCategoryRule(categoryRulePrompt.merchant, categoryRulePrompt.category);
-    setCategoryRulePrompt(null);
-  };
-
   return (
     <div className="space-y-6">
       {/* Top Header & 4 Ways to Add */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-xl font-bold tracking-tight text-white">Expense Tracker</h2>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-[#9e9a93]">
             Four entry modes: Manual, Voice speech, Receipt OCR, or Bank CSV statement.
           </p>
         </div>
@@ -336,7 +468,7 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
       )}
 
       {/* Sub-Navigation Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
+      <div className="flex items-center gap-2 border-b border-[#262930] pb-2">
         <button
           onClick={() => setActiveSubTab('list')}
           className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
@@ -376,7 +508,7 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
               : 'text-[#9e9a93] hover:text-[#f5f3ef]'
           }`}
         >
-          Learned Rules ({categoryRules.length})
+          Rules & Categories ({categoryRules.length + customCategories.length})
         </button>
       </div>
 
@@ -386,17 +518,28 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
           {/* Account Bucket Selector & Cash Flow Breakdown */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="flex items-center gap-1 rounded-xl border border-[#262930] bg-[#111419]/70 p-1">
-              {(['ALL', 'bank', 'credit', 'cash'] as const).map((acc) => (
+              <button
+                onClick={() => setSelectedAccountFilter('ALL')}
+                className={`flex-1 rounded-lg py-1.5 text-center text-xs font-medium transition-all ${
+                  selectedAccountFilter === 'ALL'
+                    ? 'bg-[#1e222b] text-gold-light font-semibold shadow border border-gold/30'
+                    : 'text-[#9e9a93] hover:text-[#f5f3ef]'
+                }`}
+              >
+                All Accounts
+              </button>
+              {accounts.slice(0, 3).map((acc) => (
                 <button
-                  key={acc}
-                  onClick={() => setSelectedAccountFilter(acc)}
-                  className={`flex-1 rounded-lg py-1.5 text-center text-xs font-medium transition-all ${
-                    selectedAccountFilter === acc
+                  key={acc.id}
+                  onClick={() => setSelectedAccountFilter(acc.id)}
+                  className={`flex-1 rounded-lg py-1.5 text-center text-xs font-medium transition-all truncate px-1 ${
+                    selectedAccountFilter === acc.id
                       ? 'bg-[#1e222b] text-gold-light font-semibold shadow border border-gold/30'
                       : 'text-[#9e9a93] hover:text-[#f5f3ef]'
                   }`}
+                  title={acc.name}
                 >
-                  {acc === 'ALL' ? 'All Accounts' : acc === 'bank' ? 'Bank' : acc === 'credit' ? 'Credit Card' : 'Cash'}
+                  {acc.name}
                 </button>
               ))}
             </div>
@@ -405,7 +548,7 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
               <div>
                 <span className="text-[10px] uppercase font-semibold text-[#9e9a93]">Money Out (Debits)</span>
                 <div className="text-base font-bold text-[#f5f3ef]">
-                  -${(totalMoneyOutCents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  -{formatMoney(totalMoneyOutCents, displayCurrency || 'USD')}
                 </div>
               </div>
               <div className="text-[10px] text-[#716c64]">Expenses & Bills</div>
@@ -415,7 +558,7 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
               <div>
                 <span className="text-[10px] uppercase font-semibold text-[#9e9a93]">Money In (Credits)</span>
                 <div className="text-base font-bold text-gain">
-                  +${(totalMoneyInCents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  +{formatMoney(totalMoneyInCents, displayCurrency || 'USD')}
                 </div>
               </div>
               <div className="text-[10px] text-[#716c64]">Refunds & Inflow</div>
@@ -442,87 +585,132 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
                 className="rounded-xl border border-[#262930] bg-[#111419]/80 px-3 py-2 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
               >
                 <option value="ALL">All Categories</option>
-                {STANDARD_CATEGORIES.map((c) => (
+                {allCategories.map((c) => (
                   <option key={c} value={c}>{c}</option>
                 ))}
               </select>
             </div>
           </div>
 
-          {/* Transactions Table */}
+          {/* Transactions Table with Edit + Delete + Line Items */}
           <div className="overflow-hidden rounded-2xl border border-[#262930] bg-[#111419]/60 backdrop-blur-md">
             {displayedExpenses.length > 0 ? (
               <div className="divide-y divide-[#262930]">
                 {displayedExpenses.map((exp) => {
                   const confPct = Math.round(exp.confidence * 100);
                   const isCredit = exp.entryType === 'credit';
-                  const acc = exp.accountType || 'bank';
+                  const isExpanded = expandedExpenseId === exp.id;
+                  const attachedAccount = accounts.find((a) => a.id === exp.accountId);
+
                   return (
-                    <div
-                      key={exp.id}
-                      className="flex flex-col gap-2 p-4 transition-colors hover:bg-[#171a21]/50 sm:flex-row sm:items-center sm:justify-between"
-                    >
-                      <div className="flex items-start gap-3">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#1e222b] text-gold-light">
-                          {exp.source === 'voice' && <Mic className="h-5 w-5" />}
-                          {exp.source === 'receipt' && <Camera className="h-5 w-5" />}
-                          {exp.source === 'csv' && <FileText className="h-5 w-5" />}
-                          {exp.source === 'manual' && <Tag className="h-5 w-5" />}
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold text-[#f5f3ef]">{exp.merchant}</span>
-                            <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${
-                              acc === 'credit'
-                                ? 'bg-loss/10 text-loss border border-loss/20'
-                                : acc === 'cash'
-                                ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                                : 'bg-gold/10 text-gold-light border border-gold/20'
-                            }`}>
-                              {acc}
-                            </span>
-                            {exp.isSubscription && (
-                              <span className="rounded bg-gold/10 px-1.5 py-0.5 text-[10px] font-medium text-gold-light border border-gold/30">
-                                Subscription
+                    <div key={exp.id} className="transition-colors hover:bg-[#171a21]/50">
+                      <div className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex items-start gap-3">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#1e222b] text-gold-light">
+                            {exp.source === 'voice' && <Mic className="h-5 w-5" />}
+                            {exp.source === 'receipt' && <Camera className="h-5 w-5" />}
+                            {exp.source === 'csv' && <FileText className="h-5 w-5" />}
+                            {exp.source === 'manual' && <Tag className="h-5 w-5" />}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-[#f5f3ef]">{exp.merchant}</span>
+                              {attachedAccount && (
+                                <span className="rounded bg-[#1e222b] px-1.5 py-0.5 text-[10px] font-medium text-[#9e9a93] border border-[#262930]">
+                                  {attachedAccount.name}
+                                </span>
+                              )}
+                              {exp.isSubscription && (
+                                <span className="rounded bg-gold/10 px-1.5 py-0.5 text-[10px] font-medium text-gold-light border border-gold/30">
+                                  Subscription
+                                </span>
+                              )}
+                              {exp.items && exp.items.length > 0 && (
+                                <button
+                                  onClick={() => setExpandedExpenseId(isExpanded ? null : exp.id)}
+                                  className="flex items-center gap-0.5 rounded bg-gold/10 px-1.5 py-0.5 text-[10px] font-medium text-gold-light hover:bg-gold/20"
+                                >
+                                  <span>{exp.items.length} items</span>
+                                  {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                                </button>
+                              )}
+                            </div>
+                            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[#9e9a93]">
+                              <span>{exp.date}</span>
+                              <span>•</span>
+                              <span className="capitalize">{exp.source}</span>
+                              <span>•</span>
+                              {/* Category Selector with Immediate Update + Rule Prompt (Fix 19) */}
+                              <select
+                                value={exp.category}
+                                onChange={(e) => handleCategoryChange(exp, e.target.value)}
+                                className="rounded border border-[#262930] bg-[#171a21] px-1.5 py-0.5 text-[11px] text-[#f5f3ef] focus:outline-none focus:border-gold"
+                              >
+                                {allCategories.map((cat) => (
+                                  <option key={cat} value={cat}>{cat}</option>
+                                ))}
+                              </select>
+                              <span
+                                title={`Category confidence: ${confPct}%`}
+                                className="rounded bg-[#1e222b] px-1.5 py-0.5 text-[10px] text-gold-light border border-gold/20"
+                              >
+                                {confPct}% conf
                               </span>
+                            </div>
+                            {exp.notes && (
+                              <p className="mt-1 text-[11px] text-[#9e9a93] italic">{exp.notes}</p>
                             )}
                           </div>
-                          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[#9e9a93]">
-                            <span>{exp.date}</span>
-                            <span>•</span>
-                            <span className="capitalize">{exp.source}</span>
-                            <span>•</span>
-                            {/* Category Selector with Rule Learning trigger */}
-                            <select
-                              value={exp.category}
-                              onChange={(e) => handleCategoryChange(exp, e.target.value)}
-                              className="rounded border border-[#262930] bg-[#171a21] px-1.5 py-0.5 text-[11px] text-[#f5f3ef] focus:outline-none"
-                            >
-                              {STANDARD_CATEGORIES.map((cat) => (
-                                <option key={cat} value={cat}>{cat}</option>
-                              ))}
-                            </select>
-                            <span
-                              title={`Category confidence: ${confPct}%`}
-                              className="rounded bg-[#1e222b] px-1.5 py-0.5 text-[10px] text-gold-light border border-gold/20"
-                            >
-                              {confPct}% conf
-                            </span>
+                        </div>
+
+                        <div className="flex items-center justify-between sm:justify-end gap-4">
+                          <div className="text-right">
+                            <div className={`text-base font-bold ${isCredit ? 'text-gain' : 'text-[#f5f3ef]'}`}>
+                              {isCredit ? '+' : '-'}{formatMoney(exp.amountCents, exp.currency || displayCurrency || 'USD')}
+                            </div>
+                            <div className="text-[10px] text-[#716c64] capitalize">
+                              {isCredit ? 'Money In' : 'Money Out'}
+                            </div>
                           </div>
-                          {exp.notes && (
-                            <p className="mt-1 text-[11px] text-[#9e9a93] italic">{exp.notes}</p>
-                          )}
+
+                          {/* Action Buttons: Edit + Delete */}
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => handleStartEdit(exp)}
+                              className="rounded-lg p-1.5 text-[#9e9a93] hover:bg-[#1e222b] hover:text-gold-light transition-colors"
+                              title="Edit Expense"
+                            >
+                              <Edit2 className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              onClick={() => setDeleteConfirmExpense(exp)}
+                              className="rounded-lg p-1.5 text-[#9e9a93] hover:bg-rose-500/10 hover:text-rose-400 transition-colors"
+                              title="Delete Expense"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
                         </div>
                       </div>
 
-                      <div className="text-right">
-                        <div className={`text-base font-bold ${isCredit ? 'text-gain' : 'text-[#f5f3ef]'}`}>
-                          {isCredit ? '+' : '-'}${(exp.amountCents / 100).toFixed(2)}
+                      {/* Expandable Line Items Preview (Fix 8) */}
+                      {isExpanded && exp.items && exp.items.length > 0 && (
+                        <div className="border-t border-[#262930]/60 bg-[#0b0d10]/40 px-6 py-3">
+                          <div className="text-[11px] font-semibold text-gold-light uppercase tracking-wider mb-2">
+                            Parsed Receipt Line Items
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                            {exp.items.map((it, idx) => (
+                              <div key={idx} className="flex justify-between items-center py-1 border-b border-[#262930]/40">
+                                <span className="text-[#c8c4bc]">{it.name}</span>
+                                <span className="font-mono text-[#f5f3ef]">
+                                  {formatMoney(it.amountCents, exp.currency || displayCurrency || 'USD')}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                        <div className="text-[10px] text-[#716c64] capitalize">
-                          {isCredit ? 'Money In' : 'Money Out'}
-                        </div>
-                      </div>
+                      )}
                     </div>
                   );
                 })}
@@ -544,12 +732,12 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
               <div>
                 <h3 className="text-sm font-semibold text-[#f5f3ef]">Monthly Subscription Burn</h3>
                 <p className="text-xs text-[#9e9a93]">
-                  Detected automatically based on recurring merchant charges (±5% recurring monthly)
+                  Strict 4-condition rule: same merchant, ≥3 charges, 24–35 day intervals, ±5% consistency or qualifying hike.
                 </p>
               </div>
               <div className="text-right">
                 <span className="text-2xl font-bold text-gold-light">
-                  ${(totalSubscriptionBurnCents / 100).toFixed(2)}
+                  {formatMoney(totalSubscriptionBurnCents, displayCurrency || 'USD')}
                 </span>
                 <span className="text-xs text-[#9e9a93]"> / month</span>
               </div>
@@ -569,14 +757,14 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
                   </span>
                 </div>
                 <div className="mt-3 text-xl font-bold text-[#f5f3ef]">
-                  ${(sub.monthlyBurnCents / 100).toFixed(2)}
+                  {formatMoney(sub.monthlyBurnCents, displayCurrency || 'USD')}
                   <span className="text-xs font-normal text-[#9e9a93]"> / mo</span>
                 </div>
 
                 {sub.priceIncreaseCents && sub.priceIncreaseCents > 0 ? (
                   <div className="mt-2 flex items-center gap-1.5 text-xs text-loss">
                     <TrendingUp className="h-3.5 w-3.5" />
-                    <span>Price increased by +${(sub.priceIncreaseCents / 100).toFixed(2)} vs previous charge!</span>
+                    <span>Price increased by +{formatMoney(sub.priceIncreaseCents, displayCurrency || 'USD')}!</span>
                   </div>
                 ) : (
                   <div className="mt-2 text-xs text-[#9e9a93]">
@@ -596,7 +784,7 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
       {activeSubTab === 'budgets' && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {STANDARD_CATEGORIES.map((cat) => {
+            {allCategories.map((cat) => {
               const spentCurrent = currentMonthExpenses
                 .filter((e) => e.category === cat)
                 .reduce((s, e) => s + e.amountCents, 0);
@@ -609,7 +797,6 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
               const limitCents = budgetObj?.monthlyLimitCents || 0;
               const pct = limitCents > 0 ? Math.min(100, Math.round((spentCurrent / limitCents) * 100)) : 0;
 
-              // Month over Month multiplier
               let momText = 'No prior spend';
               if (spentPrev > 0) {
                 const ratio = spentCurrent / spentPrev;
@@ -624,10 +811,10 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
                   </div>
                   <div className="mt-3 flex items-baseline justify-between">
                     <span className="text-lg font-bold text-[#f5f3ef]">
-                      ${(spentCurrent / 100).toFixed(2)}
+                      {formatMoney(spentCurrent, displayCurrency || 'USD')}
                     </span>
                     <span className="text-xs text-[#9e9a93]">
-                      Limit: ${limitCents > 0 ? (limitCents / 100).toFixed(0) : 'None'}
+                      Limit: {limitCents > 0 ? formatMoney(limitCents, displayCurrency || 'USD') : 'None'}
                     </span>
                   </div>
 
@@ -642,10 +829,18 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
                     </div>
                   )}
 
-                  <div className="mt-3 flex justify-end">
+                  <div className="mt-3 flex justify-between items-center text-[11px]">
+                    {limitCents > 0 && (
+                      <button
+                        onClick={() => deleteCategoryBudget(cat)}
+                        className="text-rose-400 hover:text-rose-300"
+                      >
+                        Remove Limit
+                      </button>
+                    )}
                     <button
                       onClick={() => {
-                        const newLim = prompt(`Set monthly budget for ${cat} in dollars:`, limitCents > 0 ? (limitCents / 100).toString() : '500');
+                        const newLim = prompt(`Set monthly budget for ${cat}:`, limitCents > 0 ? (limitCents / 100).toString() : '500');
                         if (newLim !== null) {
                           const val = parseFloat(newLim);
                           if (!isNaN(val)) {
@@ -653,7 +848,7 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
                           }
                         }
                       }}
-                      className="text-[11px] text-gold-light hover:text-gold"
+                      className="text-gold-light hover:text-gold ml-auto"
                     >
                       {limitCents > 0 ? 'Edit Limit' : 'Set Budget'}
                     </button>
@@ -665,46 +860,154 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
         </div>
       )}
 
-      {/* VIEW 4: Learned Rules */}
+      {/* VIEW 4: Learned Rules & Custom Categories */}
       {activeSubTab === 'rules' && (
-        <div className="space-y-4">
+        <div className="space-y-6">
+          {/* Custom Categories Section */}
+          <div className="rounded-2xl border border-[#262930] bg-[#111419]/70 p-5 backdrop-blur-md">
+            <h3 className="text-sm font-semibold text-[#f5f3ef]">Custom Categories</h3>
+            <p className="text-xs text-[#9e9a93]">
+              Add your own custom spending categories. Deleting a category reassigns existing transactions to Miscellaneous.
+            </p>
+
+            {/* Add Custom Category Form */}
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!newCatName.trim()) return;
+                await addCustomCategory(newCatName.trim());
+                setNewCatName('');
+              }}
+              className="mt-4 flex gap-2"
+            >
+              <input
+                type="text"
+                placeholder="New category name (e.g. Pet Supplies, Hobbies)"
+                value={newCatName}
+                onChange={(e) => setNewCatName(e.target.value)}
+                className="flex-1 rounded-xl border border-[#262930] bg-[#0b0d10] px-3 py-2 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
+              />
+              <button
+                type="submit"
+                className="rounded-xl bg-gradient-to-r from-gold to-gold-light px-4 py-2 text-xs font-semibold text-[#0b0d10] hover:brightness-110"
+              >
+                Add Category
+              </button>
+            </form>
+
+            {/* Custom Categories List */}
+            <div className="mt-4 space-y-2">
+              {customCategories.length > 0 ? (
+                customCategories.map((c) => (
+                  <div key={c.id} className="flex items-center justify-between rounded-xl border border-[#262930] bg-[#0b0d10]/60 p-3 text-xs">
+                    {editingCatId === c.id ? (
+                      <div className="flex flex-1 items-center gap-2">
+                        <input
+                          type="text"
+                          value={editingCatName}
+                          onChange={(e) => setEditingCatName(e.target.value)}
+                          className="flex-1 rounded-lg border border-gold/40 bg-[#171a21] px-2 py-1 text-xs text-[#f5f3ef] focus:outline-none"
+                        />
+                        <button
+                          onClick={async () => {
+                            if (editingCatName.trim()) {
+                              await renameCustomCategory(c.id, editingCatName.trim());
+                              setEditingCatId(null);
+                            }
+                          }}
+                          className="rounded-lg bg-gold px-2.5 py-1 text-xs font-semibold text-[#0b0d10]"
+                        >
+                          Save
+                        </button>
+                        <button
+                          onClick={() => setEditingCatId(null)}
+                          className="text-xs text-[#9e9a93] hover:text-[#f5f3ef]"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <span className="font-semibold text-[#f5f3ef]">{c.name}</span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              setEditingCatId(c.id);
+                              setEditingCatName(c.name);
+                            }}
+                            className="text-[11px] text-gold-light hover:underline"
+                          >
+                            Rename
+                          </button>
+                          <button
+                            onClick={async () => {
+                              if (confirm(`Delete custom category "${c.name}"? All transactions using it will be moved to Miscellaneous.`)) {
+                                await deleteCustomCategory(c.id);
+                              }
+                            }}
+                            className="text-[11px] text-rose-400 hover:text-rose-300"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <div className="text-xs text-[#716c64] italic">No custom categories created yet.</div>
+              )}
+            </div>
+          </div>
+
+          {/* Global Categorization Rules Section */}
           <div className="rounded-2xl border border-[#262930] bg-[#111419]/70 p-5 backdrop-blur-md">
             <h3 className="text-sm font-semibold text-[#f5f3ef]">Global Categorization Rules</h3>
             <p className="text-xs text-[#9e9a93]">
-              When you re-categorize an expense, FundPilot learns a global rule for that merchant.
+              Keyword rules learned from user adjustments. Future imports for these merchants map automatically.
             </p>
-          </div>
 
-          <div className="divide-y divide-[#262930] rounded-2xl border border-[#262930] bg-[#111419]/50">
-            {categoryRules.length > 0 ? (
-              categoryRules.map((rule) => (
-                <div key={rule.id} className="flex items-center justify-between p-4 text-xs">
-                  <div>
-                    <span className="font-semibold text-[#f5f3ef]">{rule.merchantPattern}</span>
-                    <span className="text-[#9e9a93]"> always maps to </span>
-                    <span className="rounded bg-gold/10 px-2 py-0.5 text-gold-light font-medium border border-gold/30">
-                      {rule.category}
-                    </span>
+            <div className="mt-4 divide-y divide-[#262930] rounded-2xl border border-[#262930] bg-[#111419]/50">
+              {categoryRules.length > 0 ? (
+                categoryRules.map((rule) => (
+                  <div key={rule.id} className="flex items-center justify-between p-4 text-xs">
+                    <div>
+                      <span className="font-semibold text-[#f5f3ef]">{rule.merchantPattern}</span>
+                      <span className="text-[#9e9a93]"> always maps to </span>
+                      <span className="rounded bg-gold/10 px-2 py-0.5 text-gold-light font-medium border border-gold/30">
+                        {rule.category}
+                      </span>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        if (confirm(`Delete rule mapping "${rule.merchantPattern}" to "${rule.category}"?`)) {
+                          await deleteCategoryRule(rule.id);
+                        }
+                      }}
+                      className="rounded-lg p-1.5 text-rose-400 hover:bg-rose-500/10 transition-colors"
+                      title="Delete Rule"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
                   </div>
-                  <span className="text-[10px] text-[#716c64]">Active Rule</span>
+                ))
+              ) : (
+                <div className="p-8 text-center text-xs text-[#9e9a93]">
+                  No custom rules yet. Re-categorize any merchant to establish a global rule.
                 </div>
-              ))
-            ) : (
-              <div className="p-8 text-center text-xs text-[#9e9a93]">
-                No custom rules yet. Re-categorize any merchant to establish a global rule.
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       )}
 
-      {/* Category Rule Prompt Modal */}
+      {/* Category Rule Prompt Modal (Fix 19) */}
       {categoryRulePrompt && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0b0d10]/80 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0b0d10]/80 p-4 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-2xl border border-[#262930] bg-[#111419] p-6 shadow-2xl">
             <h4 className="text-sm font-bold text-[#f5f3ef]">Save Global Rule?</h4>
             <p className="mt-2 text-xs text-[#c8c4bc]">
-              Would you like to always categorize merchant <strong className="text-gold-light">{categoryRulePrompt.merchant}</strong> as <strong className="text-gold-light">{categoryRulePrompt.category}</strong> for future imports?
+              Transaction category updated! Would you also like to always categorize future transactions from <strong className="text-gold-light">{categoryRulePrompt.merchant}</strong> as <strong className="text-gold-light">{categoryRulePrompt.category}</strong>?
             </p>
             <div className="mt-5 flex justify-end gap-2">
               <button
@@ -720,6 +1023,165 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
                 Save Global Rule
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Delete Expense Confirmation */}
+      {deleteConfirmExpense && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0b0d10]/80 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl border border-[#262930] bg-[#111419] p-6 shadow-2xl">
+            <h4 className="text-sm font-bold text-[#f5f3ef]">Delete Expense</h4>
+            <p className="mt-2 text-xs text-[#c8c4bc]">
+              Are you sure you want to delete the expense of <strong className="text-gold-light">{formatMoney(deleteConfirmExpense.amountCents, deleteConfirmExpense.currency || displayCurrency || 'USD')}</strong> at <strong className="text-[#f5f3ef]">{deleteConfirmExpense.merchant}</strong> on {deleteConfirmExpense.date}?
+            </p>
+            <p className="mt-1 text-[11px] text-[#716c64]">
+              This will update your net worth and safe-to-spend totals immediately.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                onClick={() => setDeleteConfirmExpense(null)}
+                className="rounded-lg px-3 py-1.5 text-xs text-[#9e9a93] hover:text-[#f5f3ef]"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-500"
+              >
+                Delete Expense
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Edit Expense */}
+      {editingExpense && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0b0d10]/80 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-[#262930] bg-[#111419] p-6 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold text-[#f5f3ef]">Edit Expense</h3>
+              <button onClick={() => setEditingExpense(null)} className="text-[#9e9a93] hover:text-[#f5f3ef]">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <form onSubmit={handleSaveEdit} className="mt-4 space-y-3">
+              <div>
+                <label className="text-xs text-[#9e9a93]">Merchant / Payee</label>
+                <input
+                  type="text"
+                  required
+                  value={editMerchant}
+                  onChange={(e) => setEditMerchant(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-[#262930] bg-[#0b0d10] px-3 py-2 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-[#9e9a93]">Amount</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    value={editAmount}
+                    onChange={(e) => setEditAmount(e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-[#262930] bg-[#0b0d10] px-3 py-2 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-[#9e9a93]">Currency</label>
+                  <select
+                    value={editCurrency}
+                    onChange={(e) => setEditCurrency(e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-[#262930] bg-[#0b0d10] px-3 py-2 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
+                  >
+                    {SUPPORTED_CURRENCIES.map((c) => (
+                      <option key={c.code} value={c.code}>{c.code} ({c.symbol})</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-[#9e9a93]">Date</label>
+                  <input
+                    type="date"
+                    required
+                    value={editDate}
+                    onChange={(e) => setEditDate(e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-[#262930] bg-[#0b0d10] px-3 py-2 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-[#9e9a93]">Category</label>
+                  <select
+                    value={editCategory}
+                    onChange={(e) => setEditCategory(e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-[#262930] bg-[#0b0d10] px-3 py-2 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
+                  >
+                    {allCategories.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-[#9e9a93]">Attached Account</label>
+                  <select
+                    value={editAccountId}
+                    onChange={(e) => setEditAccountId(e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-[#262930] bg-[#0b0d10] px-3 py-2 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
+                  >
+                    <option value="">None (Generic)</option>
+                    {accounts.map((a) => (
+                      <option key={a.id} value={a.id}>{a.name} ({a.type})</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-[#9e9a93]">Direction</label>
+                  <select
+                    value={editEntryType}
+                    onChange={(e) => setEditEntryType(e.target.value as any)}
+                    className="mt-1 w-full rounded-xl border border-[#262930] bg-[#0b0d10] px-3 py-2 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
+                  >
+                    <option value="debit">Money Out (Debit)</option>
+                    <option value="credit">Money In (Credit)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs text-[#9e9a93]">Notes</label>
+                <input
+                  type="text"
+                  value={editNotes}
+                  onChange={(e) => setEditNotes(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-[#262930] bg-[#0b0d10] px-3 py-2 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
+                />
+              </div>
+
+              <div className="mt-5 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingExpense(null)}
+                  className="rounded-xl px-4 py-2 text-xs text-[#9e9a93] hover:text-[#f5f3ef]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-xl bg-gradient-to-r from-gold to-gold-light px-4 py-2 text-xs font-semibold text-[#0b0d10] hover:brightness-110"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -745,9 +1207,10 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
                   className="mt-1 w-full rounded-xl border border-[#262930] bg-[#0b0d10] px-3 py-2 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
                 />
               </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs text-[#9e9a93]">Amount ($ USD)</label>
+                  <label className="text-xs text-[#9e9a93]">Amount</label>
                   <input
                     type="number"
                     step="0.01"
@@ -759,6 +1222,21 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
                   />
                 </div>
                 <div>
+                  <label className="text-xs text-[#9e9a93]">Currency</label>
+                  <select
+                    value={manualCurrency}
+                    onChange={(e) => setManualCurrency(e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-[#262930] bg-[#0b0d10] px-3 py-2 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
+                  >
+                    {SUPPORTED_CURRENCIES.map((c) => (
+                      <option key={c.code} value={c.code}>{c.code} ({c.symbol})</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
                   <label className="text-xs text-[#9e9a93]">Date</label>
                   <input
                     type="date"
@@ -768,18 +1246,32 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
                     className="mt-1 w-full rounded-xl border border-[#262930] bg-[#0b0d10] px-3 py-2 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
                   />
                 </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs text-[#9e9a93]">Account Bucket</label>
+                  <label className="text-xs text-[#9e9a93]">Category</label>
                   <select
-                    value={manualAccountType}
-                    onChange={(e) => setManualAccountType(e.target.value as any)}
+                    value={manualCategory}
+                    onChange={(e) => setManualCategory(e.target.value)}
                     className="mt-1 w-full rounded-xl border border-[#262930] bg-[#0b0d10] px-3 py-2 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
                   >
-                    <option value="bank">Bank / Debit</option>
-                    <option value="credit">Credit Card</option>
-                    <option value="cash">Cash</option>
+                    {allCategories.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-[#9e9a93]">Source Account</label>
+                  <select
+                    value={manualAccountId}
+                    onChange={(e) => setManualAccountId(e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-[#262930] bg-[#0b0d10] px-3 py-2 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
+                  >
+                    <option value="">None (Generic)</option>
+                    {accounts.map((a) => (
+                      <option key={a.id} value={a.id}>{a.name} ({a.type})</option>
+                    ))}
                   </select>
                 </div>
                 <div>
@@ -794,18 +1286,7 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
                   </select>
                 </div>
               </div>
-              <div>
-                <label className="text-xs text-[#9e9a93]">Category</label>
-                <select
-                  value={manualCategory}
-                  onChange={(e) => setManualCategory(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-[#262930] bg-[#0b0d10] px-3 py-2 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
-                >
-                  {STANDARD_CATEGORIES.map((c) => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
-              </div>
+
               <div>
                 <label className="text-xs text-[#9e9a93]">Notes (Optional)</label>
                 <input
@@ -816,6 +1297,7 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
                   className="mt-1 w-full rounded-xl border border-[#262930] bg-[#0b0d10] px-3 py-2 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
                 />
               </div>
+
               <div className="mt-5 flex justify-end gap-2">
                 <button
                   type="button"
@@ -882,13 +1364,12 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
               </div>
             </div>
 
-            {/* Parsed Result Preview */}
             {voiceParsed && (
               <div className="mt-4 rounded-xl border border-gold/30 bg-gold/10 p-3 text-xs text-[#f5f3ef]">
                 <div className="font-semibold text-gold-light">Parsed Expense:</div>
                 <div className="mt-1">Merchant: <strong>{voiceParsed.merchant}</strong></div>
                 <div>Amount: <strong>${(voiceParsed.amountCents / 100).toFixed(2)}</strong></div>
-                <div>Category: <strong>{voiceParsed.category}</strong> ({Math.round(voiceParsed.confidence * 100)}% AI confidence)</div>
+                <div>Category: <strong>{voiceParsed.category}</strong></div>
               </div>
             )}
 
@@ -913,18 +1394,18 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
         </div>
       )}
 
-      {/* MODAL 3: Receipt OCR */}
+      {/* MODAL 3: Receipt OCR with Editable Items & Reconciliation Gate (Fix 8) */}
       {isReceiptModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0b0d10]/80 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-2xl border border-[#262930] bg-[#111419] p-6 shadow-2xl">
+          <div className="w-full max-w-lg rounded-2xl border border-[#262930] bg-[#111419] p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
             <h3 className="text-base font-bold text-[#f5f3ef]">Receipt Photo OCR (Tesseract.js)</h3>
             <p className="mt-1 text-xs text-[#9e9a93]">
-              100% Client-side optical character recognition. Upload an image or paste receipt text.
+              100% Client-side optical character recognition. All fields and line items are editable before saving.
             </p>
 
-            <div className="mt-4 space-y-3">
+            <div className="mt-4 space-y-4">
               <div>
-                <label className="text-xs text-[#9e9a93]">Upload Receipt Image (PNG / JPG)</label>
+                <label className="text-xs text-[#9e9a93]">Upload Receipt Image</label>
                 <input
                   type="file"
                   accept="image/*"
@@ -938,7 +1419,7 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
               </div>
 
               <div>
-                <label className="text-xs text-[#9e9a93]">Or paste receipt text (Acceptance Check 2):</label>
+                <label className="text-xs text-[#9e9a93]">Or paste receipt text directly:</label>
                 <textarea
                   rows={4}
                   placeholder={`TRADER JOE'S\nOrganic Milk $4.99\nBananas $1.29\nSourdough Bread $3.99\nSubtotal: $10.27\nTax: $0.82\nGrand Total: $11.09`}
@@ -962,26 +1443,120 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
                 </div>
               )}
 
-              {parsedReceipt && (
-                <div className="rounded-xl border border-gold/30 bg-gold/10 p-3 text-xs">
-                  <div className="flex items-center justify-between font-bold text-[#f5f3ef]">
-                    <span>{parsedReceipt.merchant}</span>
-                    <span>Total: ${(parsedReceipt.totalCents / 100).toFixed(2)}</span>
+              {/* Editable Parsed Fields & Line Items */}
+              {hasParsedReceipt && (
+                <div className="rounded-xl border border-[#262930] bg-[#0b0d10]/80 p-4 space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[11px] text-[#9e9a93]">Merchant</label>
+                      <input
+                        type="text"
+                        value={ocrMerchant}
+                        onChange={(e) => setOcrMerchant(e.target.value)}
+                        className="mt-1 w-full rounded-lg border border-[#262930] bg-[#171a21] px-2.5 py-1.5 text-xs text-[#f5f3ef]"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-[#9e9a93]">Date</label>
+                      <input
+                        type="date"
+                        value={ocrDate}
+                        onChange={(e) => setOcrDate(e.target.value)}
+                        className="mt-1 w-full rounded-lg border border-[#262930] bg-[#171a21] px-2.5 py-1.5 text-xs text-[#f5f3ef]"
+                      />
+                    </div>
                   </div>
-                  <div className="mt-1 text-[11px] text-gold-light">
-                    Line items ({parsedReceipt.items.length}):
+
+                  {/* Line Items List with Edit/Delete/Add */}
+                  <div>
+                    <div className="flex items-center justify-between text-xs font-semibold text-[#f5f3ef] mb-1">
+                      <span>Line Items ({ocrItems.length})</span>
+                      <button
+                        type="button"
+                        onClick={() => setOcrItems([...ocrItems, { name: 'New Item', amountCents: 100 }])}
+                        className="text-[11px] text-gold-light hover:underline"
+                      >
+                        + Add Item
+                      </button>
+                    </div>
+                    <div className="max-h-36 overflow-y-auto space-y-1.5">
+                      {ocrItems.map((it, idx) => (
+                        <div key={idx} className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={it.name}
+                            onChange={(e) => {
+                              const updated = [...ocrItems];
+                              updated[idx] = { ...it, name: e.target.value };
+                              setOcrItems(updated);
+                            }}
+                            className="flex-1 rounded-lg border border-[#262930] bg-[#171a21] px-2 py-1 text-xs text-[#f5f3ef]"
+                          />
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={(it.amountCents / 100).toFixed(2)}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value);
+                              const updated = [...ocrItems];
+                              updated[idx] = { ...it, amountCents: isNaN(val) ? 0 : Math.round(val * 100) };
+                              setOcrItems(updated);
+                            }}
+                            className="w-20 rounded-lg border border-[#262930] bg-[#171a21] px-2 py-1 text-xs text-[#f5f3ef] text-right font-mono"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setOcrItems(ocrItems.filter((_, i) => i !== idx))}
+                            className="text-rose-400 hover:text-rose-300 p-1"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <div className="mt-1 max-h-24 overflow-y-auto space-y-0.5 text-[11px] text-[#c8c4bc]">
-                    {parsedReceipt.items.map((it, i) => (
-                      <div key={i} className="flex justify-between">
-                        <span>{it.name}</span>
-                        <span>${(it.amountCents / 100).toFixed(2)}</span>
-                      </div>
-                    ))}
+
+                  {/* Tax & Total */}
+                  <div className="grid grid-cols-2 gap-3 border-t border-[#262930] pt-2">
+                    <div>
+                      <label className="text-[11px] text-[#9e9a93]">Tax Amount ($)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={ocrTaxInput}
+                        onChange={(e) => setOcrTaxInput(e.target.value)}
+                        className="mt-1 w-full rounded-lg border border-[#262930] bg-[#171a21] px-2.5 py-1.5 text-xs text-[#f5f3ef]"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-[#9e9a93]">Grand Total ($)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={ocrTotalInput}
+                        onChange={(e) => setOcrTotalInput(e.target.value)}
+                        className="mt-1 w-full rounded-lg border border-[#262930] bg-[#171a21] px-2.5 py-1.5 text-xs text-[#f5f3ef] font-bold"
+                      />
+                    </div>
                   </div>
-                  <div className="mt-2 flex justify-between border-t border-gold/20 pt-1 text-[11px] font-semibold text-gold-light">
-                    <span>Grand Total Matches:</span>
-                    <span>${(parsedReceipt.totalCents / 100).toFixed(2)}</span>
+
+                  {/* Reconciliation Gate Display (Fix 8) */}
+                  <div className={`rounded-xl p-3 text-xs ${
+                    isOcrReconciled
+                      ? 'border border-gain/30 bg-gain/10 text-gain'
+                      : 'border border-amber-500/30 bg-amber-500/10 text-amber-300'
+                  }`}>
+                    <div className="flex items-center justify-between font-semibold">
+                      <span>Reconciliation Check:</span>
+                      <span>
+                        Items (${(ocrItemsSumCents / 100).toFixed(2)}) + Tax (${(ocrTaxCents / 100).toFixed(2)}) = ${( (ocrItemsSumCents + ocrTaxCents) / 100 ).toFixed(2)}
+                      </span>
+                    </div>
+                    {!isOcrReconciled && (
+                      <p className="mt-1 text-[11px] text-amber-200">
+                        Mismatch of ${Math.abs((ocrItemsSumCents + ocrTaxCents - ocrTotalCents) / 100).toFixed(2)} with Grand Total (${(ocrTotalCents / 100).toFixed(2)}). Reconciliation must match to the exact cent to import.
+                      </p>
+                    )}
                   </div>
                 </div>
               )}
@@ -997,9 +1572,9 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
               </button>
               <button
                 type="button"
-                disabled={!parsedReceipt || parsedReceipt.totalCents <= 0}
+                disabled={!isOcrReconciled || ocrTotalCents <= 0}
                 onClick={confirmReceiptExpense}
-                className="rounded-xl bg-gradient-to-r from-gold to-gold-light px-4 py-2 text-xs font-semibold text-[#0b0d10] hover:brightness-110 disabled:opacity-50"
+                className="rounded-xl bg-gradient-to-r from-gold to-gold-light px-4 py-2 text-xs font-semibold text-[#0b0d10] hover:brightness-110 disabled:opacity-40"
               >
                 Import Receipt
               </button>

@@ -1,35 +1,56 @@
-// FundPilot Core Data Types
-// All monetary values are strictly stored as integer cents (1 USD = 100 cents, 1 INR = 100 paise)
-// Floating point numbers are NEVER used for monetary values.
+// FundPilot Core Data Types — Final Architecture
+// All monetary values are strictly stored as integers in their currency's smallest unit.
+// Floating point numbers are NEVER used for monetary storage.
 
 export type TransactionSource = 'manual' | 'voice' | 'receipt' | 'csv';
-export type AccountBucket = 'bank' | 'credit' | 'cash';
+export type AccountType = 'bank' | 'credit' | 'cash' | 'broker';
+export type InvestmentType = 'Stocks' | '401(k)' | 'Mutual Funds' | 'ETFs' | 'Crypto' | 'Bonds' | 'Other';
+
+export interface ExpenseItem {
+  name: string;
+  amountCents: number;
+}
 
 export interface Expense {
   id: string;
-  amountCents: number; // Integer cents
+  amountCents: number; // Smallest integer unit in specified currency
+  currency: string; // ISO 4217 code (USD, INR, EUR, JPY, BHD, etc.)
   merchant: string;
   category: string;
-  date: string; // YYYY-MM-DD
+  date: string; // YYYY-MM-DD local date
   source: TransactionSource;
-  accountType?: AccountBucket; // 'bank' | 'credit' | 'cash'
-  entryType?: 'debit' | 'credit'; // 'debit' = money out, 'credit' = money in
-  confidence: number; // 0.0 - 1.0 (e.g. 0.95 = 95%)
+  accountId?: string; // Attached account ID
+  entryType: 'debit' | 'credit'; // 'debit' = money out (spending), 'credit' = money in (inflow)
+  confidence: number; // 0.0 - 1.0
   notes?: string;
   isSubscription?: boolean;
+  items?: ExpenseItem[];
+  dedupKey?: string;
   createdAt: number;
-}
-
-export interface CategoryRule {
-  id: string;
-  merchantPattern: string; // Lowercase pattern match
-  category: string;
   updatedAt: number;
+  deviceId?: string;
 }
 
-export interface CategoryBudget {
-  category: string;
-  monthlyLimitCents: number;
+export interface Account {
+  id: string;
+  name: string;
+  type: AccountType;
+  balanceCents: number; // User-entered snapshot
+  currency: string; // ISO 4217 code
+  lastEditedDate: string; // YYYY-MM-DD local date
+  updatedAt: number;
+  deviceId?: string;
+}
+
+export interface InvestmentEntry {
+  id: string;
+  label?: string; // Optional short name, defaults to type name
+  type: InvestmentType;
+  amountCents: number; // Integer units
+  currency: string; // ISO 4217 code
+  lastUpdated: string; // Formatted date e.g. "Nov 15, 2026" or YYYY-MM-DD
+  updatedAt: number;
+  deviceId?: string;
 }
 
 export interface Fund {
@@ -38,109 +59,136 @@ export interface Fund {
   targetAmountCents: number;
   currentAmountCents: number;
   targetDate: string; // YYYY-MM-DD
-  currency: 'USD' | 'INR';
+  currency: string;
   createdAt: number;
+  updatedAt: number;
+  deviceId?: string;
 }
 
 export interface FundAllocation {
   id: string;
   fundId: string;
+  sourceAccountId?: string; // ID of account debited/credited
   amountCents: number;
   type: 'deposit' | 'withdraw';
   date: string; // YYYY-MM-DD
   note?: string;
   createdAt: number;
+  updatedAt: number;
+  deviceId?: string;
 }
 
 export interface FundAutoRule {
   id: string;
   fundId: string;
+  sourceAccountId?: string;
   amountCents: number;
   dayOfMonth: number; // 1 - 31
   active: boolean;
   lastAppliedDate?: string; // YYYY-MM-DD
-}
-
-export interface TaxLot {
-  id: string;
-  date: string;
-  shares: number;
-  costPerShareCents: number;
-  totalCostCents: number;
-}
-
-export type AssetType = 'equity' | 'crypto';
-
-export interface Holding {
-  id: string;
-  ticker: string;
-  assetType: AssetType;
-  shares: number;
-  totalCostCents: number;
-  taxLots: TaxLot[];
-  realizedPnlCents?: number;
-  dividendsReceivedCents?: number;
-  notes?: string;
   updatedAt: number;
+  deviceId?: string;
 }
 
-export interface CorporateAction {
+export interface CustomCategory {
   id: string;
-  ticker: string;
-  type: 'split' | 'dividend';
-  splitRatio?: number; // e.g. 8 for 8-for-1
-  dividendCentsPerShare?: number;
-  date: string; // YYYY-MM-DD
-  appliedAt: number;
-  notes?: string;
+  name: string;
+  createdAt: number;
+  updatedAt: number;
+  deviceId?: string;
 }
 
-export interface QuoteData {
-  ticker: string;
-  price: number; // Current spot price in USD
-  changePercent?: number;
-  timestamp: number;
-  source: string;
-  isStale?: boolean;
+export interface CategoryRule {
+  id: string;
+  merchantPattern: string; // Lowercase pattern match
+  category: string;
+  updatedAt: number;
+  deviceId?: string;
 }
 
-export interface FxRateData {
-  pair: string; // "USD/INR"
-  rate: number; // e.g. 84.25
+export interface CategoryBudget {
+  category: string;
+  monthlyLimitCents: number;
+  currency?: string;
+  updatedAt: number;
+  deviceId?: string;
+}
+
+export interface BillReminder {
+  id: string;
+  name: string;
+  amountCents: number;
+  currency: string;
+  dueDay: number; // 1 - 31
+  active: boolean;
+  paidMonths?: string[]; // e.g. ["2026-11"]
+  updatedAt: number;
+  deviceId?: string;
+}
+
+export interface FxRatesMap {
+  base: string; // "USD"
+  rates: Record<string, number>;
   asOfDate: string;
   timestamp: number;
 }
 
 export interface UserSettings {
-  bankCashCents: number;
-  creditCardOwedCents: number; // Credit card balance owed (liability subtracted from net worth)
-  monthlyIncomeCents: number; // Money in
-  fixedBillsCents: number; // Money out
-  portfolioTargetValueCents?: number;
-  portfolioTargetDate?: string;
-  autoLockMinutes: number;
+  autoLockMinutes: number; // 1, 5, 15, 30
+  displayCurrency: string; // ISO 4217 code (default USD)
   useReducedMotion: boolean;
   prefer2D: boolean;
-  biometricsEnabled: boolean;
-  cloudLlmOptIn: boolean;
-  cloudLlmKey?: string;
+  monthlyIncomeCents: number; // Money in settings
+  fixedBillsCents: number; // Fixed monthly bills
+  incomeCurrency?: string;
+  fixedBillsCurrency?: string;
+  // Legacy migration placeholders
+  bankCashCents?: number;
+  creditCardOwedCents?: number;
+  updatedAt: number;
+  deviceId?: string;
 }
 
 export interface EncryptedVaultMeta {
   salt: string; // Base64
   verifier: string; // Base64 ciphertext of verification phrase
   verifierIv: string; // Base64 IV
-  biometricCredentialId?: string;
-  biometricWrappedKey?: string;
+  recoveryWrappedKey?: string; // Base64 ciphertext of vault key encrypted with recovery key
+  recoveryWrappedIv?: string; // Base64 IV
   updatedAt: number;
 }
 
 export interface VaultRecord {
   id: string;
-  type: 'expense' | 'fund' | 'fund_allocation' | 'fund_rule' | 'holding' | 'corporate_action' | 'category_rule' | 'budget' | 'settings';
+  type:
+    | 'expense'
+    | 'account'
+    | 'investment'
+    | 'fund'
+    | 'fund_allocation'
+    | 'fund_rule'
+    | 'bill'
+    | 'custom_category'
+    | 'category_rule'
+    | 'budget'
+    | 'settings';
   iv: string; // Base64 IV
   ciphertext: string; // Base64 ciphertext
   updatedAt: number;
+}
+
+export interface SyncTombstone {
+  id: string;
+  type: string;
+  deletedAt: number;
+}
+
+export interface SyncReport {
+  addedCount: number;
+  updatedCount: number;
+  tombstoneDeletedCount: number;
+  skippedCount: number;
+  conflicts: Array<{ id: string; type: string; winner: string; reason: string }>;
 }
 
 export interface SubscriptionDetail {

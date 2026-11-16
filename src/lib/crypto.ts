@@ -1,11 +1,13 @@
-// WebCrypto Cryptographic Engine
+// WebCrypto Cryptographic Engine — Final Architecture
 // Zero-knowledge encryption at rest using AES-GCM 256-bit
 // Master Key derived from user PIN using PBKDF2 (100,000 iterations of SHA-256)
-// The PIN itself is NEVER stored. Only a random salt and an encrypted verifier token are saved.
+// Recovery Key derived from 12-word mnemonic using PBKDF2 (100,000 iterations of SHA-256)
+// PIN and Recovery Key are NEVER stored in persistent storage.
 
 const PBKDF2_ITERATIONS = 100000;
 const AES_KEY_LENGTH = 256;
 const VERIFIER_CONSTANT = 'FUNDPILOT_SECURE_VAULT_AUTHENTICATED_V1';
+const RECOVERY_SALT_FIXED = 'FUNDPILOT_RECOVERY_KEY_SALT_STATIC_V1';
 
 // Base64 helper utilities
 export function bufferToBase64(buffer: ArrayBuffer | Uint8Array): string {
@@ -46,7 +48,6 @@ export async function deriveKeyFromPin(pin: string, saltBase64: string): Promise
   const pinBuffer = enc.encode(pin);
   const saltBuffer = base64ToBuffer(saltBase64);
 
-  // Import PIN as raw key material
   const keyMaterial = await crypto.subtle.importKey(
     'raw',
     pinBuffer,
@@ -55,7 +56,6 @@ export async function deriveKeyFromPin(pin: string, saltBase64: string): Promise
     ['deriveKey']
   );
 
-  // Derive AES-GCM key
   const derivedKey = await crypto.subtle.deriveKey(
     {
       name: 'PBKDF2',
@@ -68,11 +68,108 @@ export async function deriveKeyFromPin(pin: string, saltBase64: string): Promise
       name: 'AES-GCM',
       length: AES_KEY_LENGTH,
     },
-    true, // Extractable only for in-memory session or backup export
+    true, // Extractable for recovery wrapping and backup export
     ['encrypt', 'decrypt']
   );
 
   return derivedKey;
+}
+
+// Derive AES-GCM 256-bit key from 12-word recovery key
+export async function deriveKeyFromRecoveryWords(words: string[]): Promise<CryptoKey> {
+  const normalized = words.map((w) => w.toLowerCase().trim()).join(' ');
+  const enc = new TextEncoder();
+  const phraseBuffer = enc.encode(normalized);
+  const saltBuffer = enc.encode(RECOVERY_SALT_FIXED);
+
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw',
+    phraseBuffer,
+    'PBKDF2',
+    false,
+    ['deriveKey']
+  );
+
+  const derivedKey = await crypto.subtle.deriveKey(
+    {
+      name: 'PBKDF2',
+      salt: saltBuffer as any,
+      iterations: PBKDF2_ITERATIONS,
+      hash: 'SHA-256',
+    },
+    keyMaterial,
+    {
+      name: 'AES-GCM',
+      length: AES_KEY_LENGTH,
+    },
+    false,
+    ['encrypt', 'decrypt']
+  );
+
+  return derivedKey;
+}
+
+// Wrap (encrypt) the vault's master CryptoKey using the recovery key
+export async function wrapVaultKeyWithRecoveryWords(
+  vaultKey: CryptoKey,
+  recoveryWords: string[]
+): Promise<{ wrappedKey: string; wrappedIv: string }> {
+  const rawMasterBytes = await crypto.subtle.exportKey('raw', vaultKey);
+  const recoveryKey = await deriveKeyFromRecoveryWords(recoveryWords);
+
+  const iv = generateIv();
+  const cipherBuffer = await crypto.subtle.encrypt(
+    {
+      name: 'AES-GCM',
+      iv: iv as any,
+    },
+    recoveryKey,
+    rawMasterBytes
+  );
+
+  return {
+    wrappedKey: bufferToBase64(cipherBuffer),
+    wrappedIv: bufferToBase64(iv),
+  };
+}
+
+// Unwrap (decrypt) the master CryptoKey using the recovery key
+export async function unwrapVaultKeyWithRecoveryWords(
+  wrappedKeyBase64: string,
+  wrappedIvBase64: string,
+  recoveryWords: string[]
+): Promise<CryptoKey | null> {
+  try {
+    const recoveryKey = await deriveKeyFromRecoveryWords(recoveryWords);
+    const cipherBytes = base64ToBuffer(wrappedKeyBase64);
+    const ivBytes = base64ToBuffer(wrappedIvBase64);
+
+    const decryptedBuffer = await crypto.subtle.decrypt(
+      {
+        name: 'AES-GCM',
+        iv: ivBytes as any,
+      },
+      recoveryKey,
+      cipherBytes as any
+    );
+
+    // Import back as AES-GCM 256-bit CryptoKey
+    const importedKey = await crypto.subtle.importKey(
+      'raw',
+      decryptedBuffer,
+      {
+        name: 'AES-GCM',
+        length: AES_KEY_LENGTH,
+      },
+      true,
+      ['encrypt', 'decrypt']
+    );
+
+    return importedKey;
+  } catch (err) {
+    // Decryption failure indicates incorrect recovery key
+    return null;
+  }
 }
 
 // Encrypt any JSON-serializable object using AES-GCM
@@ -143,4 +240,15 @@ export async function verifyPinAndDeriveKey(
     // Decryption failure indicates wrong PIN
     return null;
   }
+}
+
+// Device ID management for conflict resolution
+export function getOrCreateDeviceId(): string {
+  if (typeof window === 'undefined') return 'node-device-01';
+  let id = localStorage.getItem('fundpilot_device_id');
+  if (!id) {
+    id = `dev-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 8)}`;
+    localStorage.setItem('fundpilot_device_id', id);
+  }
+  return id;
 }

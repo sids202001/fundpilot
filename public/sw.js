@@ -1,9 +1,8 @@
 // FundPilot Service Worker - Offline Cache
-const CACHE_NAME = 'fundpilot-v1';
+const CACHE_NAME = 'fundpilot-v2';
 const STATIC_ASSETS = [
   '/',
-  '/manifest.json',
-  '/globals.css'
+  '/manifest.json'
 ];
 
 self.addEventListener('install', (event) => {
@@ -31,11 +30,12 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // If fetching quotes or FX API while offline, let the client handle cache fallback
-  if (event.request.url.includes('/api/')) {
+  // If fetching FX API while offline, let client handle cache fallback
+  if (event.request.url.includes('/api/fx')) {
     event.respondWith(
       fetch(event.request).catch(() => {
         return new Response(JSON.stringify({ error: 'offline', offline: true }), {
+          status: 503,
           headers: { 'Content-Type': 'application/json' }
         });
       })
@@ -43,6 +43,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Network-first for navigations, cache-first for static
   event.respondWith(
     caches.match(event.request).then((cached) => {
       return cached || fetch(event.request).catch(() => caches.match('/'));

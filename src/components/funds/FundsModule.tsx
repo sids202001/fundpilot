@@ -3,6 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { useStore } from '@/lib/store';
 import { Fund, FundAllocation, FundAutoRule } from '@/lib/types';
+import { formatMoney, SUPPORTED_CURRENCIES, convertCurrency } from '@/lib/currencies';
 import {
   Plus,
   PiggyBank,
@@ -10,22 +11,33 @@ import {
   ArrowDownLeft,
   Calendar,
   Clock,
-  Sparkles,
   Coins,
   Repeat,
   Check,
   AlertCircle,
+  Edit2,
+  Trash2,
+  Pause,
+  Play,
+  X,
 } from 'lucide-react';
 
 export function FundsModule({ selectedFundId }: { selectedFundId?: string | null }) {
   const {
     funds,
     createFund,
+    updateFund,
+    deleteFund,
     fundAllocations,
     allocateFund,
+    deleteFundAllocation,
     fundAutoRules,
     createFundAutoRule,
-    fxRate,
+    toggleFundAutoRule,
+    deleteFundAutoRule,
+    accounts,
+    displayCurrency,
+    rates,
   } = useStore();
 
   const [activeFundId, setActiveFundId] = useState<string | null>(selectedFundId || null);
@@ -34,21 +46,37 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isAllocateModalOpen, setIsAllocateModalOpen] = useState(false);
   const [isRuleModalOpen, setIsRuleModalOpen] = useState(false);
+  const [editingFund, setEditingFund] = useState<Fund | null>(null);
+  const [deleteConfirmFund, setDeleteConfirmFund] = useState<Fund | null>(null);
+  const [deleteConfirmAlloc, setDeleteConfirmAlloc] = useState<FundAllocation | null>(null);
+  const [allocError, setAllocError] = useState<string | null>(null);
 
   // Create Fund Form
   const [fundName, setFundName] = useState('');
   const [targetAmount, setTargetAmount] = useState('');
   const [targetDate, setTargetDate] = useState('');
-  const [currency, setCurrency] = useState<'USD' | 'INR'>('USD');
+  const [fundCurrency, setFundCurrency] = useState(displayCurrency || 'USD');
 
-  // Allocate Form
+  // Edit Fund Form
+  const [editName, setEditName] = useState('');
+  const [editTargetAmount, setEditTargetAmount] = useState('');
+  const [editTargetDate, setEditTargetDate] = useState('');
+  const [editCurrency, setEditCurrency] = useState('USD');
+
+  // Allocate Form (Fix 18: requires source bank/cash account)
   const [allocAmount, setAllocAmount] = useState('');
   const [allocType, setAllocType] = useState<'deposit' | 'withdraw'>('deposit');
+  const [sourceAccountId, setSourceAccountId] = useState<string>(
+    accounts.find((a) => a.type === 'bank' || a.type === 'cash')?.id || accounts[0]?.id || ''
+  );
   const [allocNote, setAllocNote] = useState('');
 
   // Auto-Rule Form
   const [ruleAmount, setRuleAmount] = useState('');
   const [ruleDay, setRuleDay] = useState('1');
+  const [ruleSourceAccountId, setRuleSourceAccountId] = useState<string>(
+    accounts.find((a) => a.type === 'bank' || a.type === 'cash')?.id || ''
+  );
 
   const selectedFund = useMemo(() => {
     return funds.find((f) => f.id === activeFundId) || funds[0] || null;
@@ -71,7 +99,7 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
     if (!fundName || isNaN(dollars) || dollars <= 0 || !targetDate) return;
 
     const targetAmountCents = Math.round(dollars * 100);
-    await createFund(fundName.trim(), targetAmountCents, targetDate, currency);
+    await createFund(fundName.trim(), targetAmountCents, targetDate, fundCurrency);
 
     setFundName('');
     setTargetAmount('');
@@ -79,15 +107,55 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
     setIsCreateModalOpen(false);
   };
 
-  // Allocation Handler
+  // Edit Fund Handler
+  const handleStartEditFund = (f: Fund) => {
+    setEditingFund(f);
+    setEditName(f.name);
+    setEditTargetAmount((f.targetAmountCents / 100).toFixed(2));
+    setEditTargetDate(f.targetDate);
+    setEditCurrency(f.currency || 'USD');
+  };
+
+  const handleSaveEditFund = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingFund) return;
+    const dollars = parseFloat(editTargetAmount);
+    if (!editName || isNaN(dollars) || dollars <= 0 || !editTargetDate) return;
+
+    await updateFund(editingFund.id, {
+      name: editName.trim(),
+      targetAmountCents: Math.round(dollars * 100),
+      targetDate: editTargetDate,
+      currency: editCurrency,
+    });
+    setEditingFund(null);
+  };
+
+  // Allocation Handler (Fix 18: Transfers Move Money with Rejection Rules)
   const handleAllocate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedFund) return;
+    setAllocError(null);
+
     const dollars = parseFloat(allocAmount);
-    if (isNaN(dollars) || dollars <= 0) return;
+    if (isNaN(dollars) || dollars <= 0) {
+      setAllocError('Please enter a valid transfer amount.');
+      return;
+    }
 
     const cents = Math.round(dollars * 100);
-    await allocateFund(selectedFund.id, cents, allocType, allocNote.trim() || undefined);
+    const result = await allocateFund(
+      selectedFund.id,
+      cents,
+      allocType,
+      sourceAccountId || undefined,
+      allocNote.trim() || undefined
+    );
+
+    if (!result.success) {
+      setAllocError(result.error || 'Transfer failed.');
+      return;
+    }
 
     setAllocAmount('');
     setAllocNote('');
@@ -103,11 +171,15 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
     if (isNaN(dollars) || dollars <= 0 || isNaN(day) || day < 1 || day > 31) return;
 
     const cents = Math.round(dollars * 100);
-    await createFundAutoRule(selectedFund.id, cents, day);
+    await createFundAutoRule(selectedFund.id, cents, day, ruleSourceAccountId || undefined);
 
     setRuleAmount('');
     setIsRuleModalOpen(false);
   };
+
+  const liquidAccounts = useMemo(() => {
+    return accounts.filter((a) => a.type === 'bank' || a.type === 'cash');
+  }, [accounts]);
 
   return (
     <div className="space-y-6">
@@ -115,8 +187,8 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-xl font-bold tracking-tight text-white">Funds & Goals (Sinking Funds)</h2>
-          <p className="text-xs text-slate-400">
-            Money with a job — segregated from spendable cash. Automated monthly allocations on app launch.
+          <p className="text-xs text-[#9e9a93]">
+            Money with a job — segregated from spendable cash. Deposits move money out of accounts; withdrawals return money.
           </p>
         </div>
         <button
@@ -144,12 +216,11 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
 
           // Multi-currency calculation
           let convertedDisplay = null;
-          if (fund.currency === 'INR' && fxRate && fxRate.rate > 0) {
-            const usdVal = fund.currentAmountCents / 100 / fxRate.rate;
-            convertedDisplay = `≈ $${usdVal.toFixed(2)} USD (Rate: ₹${fxRate.rate.toFixed(2)} as of ${fxRate.asOfDate})`;
-          } else if (fund.currency === 'USD' && fxRate && fxRate.rate > 0) {
-            const inrVal = (fund.currentAmountCents / 100) * fxRate.rate;
-            convertedDisplay = `≈ ₹${inrVal.toLocaleString('en-IN', { maximumFractionDigits: 0 })} INR (Rate: ₹${fxRate.rate.toFixed(2)} as of ${fxRate.asOfDate})`;
+          if (fund.currency !== displayCurrency && rates[fund.currency]) {
+            const conv = convertCurrency(fund.currentAmountCents, fund.currency, displayCurrency, rates);
+            if (conv) {
+              convertedDisplay = `≈ ${formatMoney(conv.convertedAmount, displayCurrency)} (FX converted)`;
+            }
           }
 
           return (
@@ -164,20 +235,40 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
             >
               <div className="flex items-center justify-between">
                 <span className="font-bold text-[#f5f3ef]">{fund.name}</span>
-                <span className="rounded bg-[#1e222b] px-2 py-0.5 text-[10px] font-semibold text-gold-light border border-gold/20">
-                  {fund.currency}
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className="rounded bg-[#1e222b] px-2 py-0.5 text-[10px] font-semibold text-gold-light border border-gold/20">
+                    {fund.currency}
+                  </span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleStartEditFund(fund);
+                    }}
+                    className="rounded p-1 text-[#9e9a93] hover:text-gold-light"
+                    title="Edit Fund"
+                  >
+                    <Edit2 className="h-3 w-3" />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDeleteConfirmFund(fund);
+                    }}
+                    className="rounded p-1 text-[#9e9a93] hover:text-rose-400"
+                    title="Delete Fund"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </div>
               </div>
 
               {/* Progress and Balances */}
               <div className="mt-4 flex items-baseline justify-between">
                 <div className="text-2xl font-bold text-[#f5f3ef]">
-                  {fund.currency === 'USD' ? '$' : '₹'}
-                  {(fund.currentAmountCents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  {formatMoney(fund.currentAmountCents, fund.currency)}
                 </div>
                 <div className="text-xs text-[#9e9a93]">
-                  Target: {fund.currency === 'USD' ? '$' : '₹'}
-                  {(fund.targetAmountCents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  Target: {formatMoney(fund.targetAmountCents, fund.currency)}
                 </div>
               </div>
 
@@ -198,8 +289,7 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
               <div className="mt-2 border-t border-[#262930] pt-2 text-[11px] text-[#9e9a93]">
                 <span>Monthly needed: </span>
                 <strong className="text-[#f5f3ef]">
-                  {fund.currency === 'USD' ? '$' : '₹'}
-                  {(monthlyNeededCents / 100).toFixed(0)}/mo
+                  {formatMoney(monthlyNeededCents, fund.currency)}/mo
                 </strong>
                 <span> to hit date in {diffMonths} mos</span>
               </div>
@@ -228,7 +318,7 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
                 </span>
               </div>
               <p className="text-xs text-[#9e9a93]">
-                Audit trail of all deposits, withdrawals, and automated recurring rules.
+                Audit trail of deposits, withdrawals, and automated recurring rules with atomic account synchronization.
               </p>
             </div>
 
@@ -236,6 +326,7 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
               <button
                 onClick={() => {
                   setAllocType('deposit');
+                  setAllocError(null);
                   setIsAllocateModalOpen(true);
                 }}
                 className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-gold to-gold-light px-3 py-1.5 text-xs font-semibold text-[#0b0d10] hover:brightness-110"
@@ -258,19 +349,50 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
             <div className="mt-4 rounded-xl border border-gold/30 bg-gold/10 p-3">
               <div className="flex items-center gap-2 text-xs font-semibold text-gold-light">
                 <Repeat className="h-4 w-4" />
-                <span>Active Auto-Rules (Catch-up runs on launch)</span>
+                <span>Active Auto-Rules (Catch-up runs on launch across all missed months)</span>
               </div>
-              <div className="mt-2 space-y-1">
-                {activeRules.map((rule) => (
-                  <div key={rule.id} className="flex items-center justify-between text-xs text-[#f5f3ef]">
-                    <span>
-                      Move ${ (rule.amountCents / 100).toFixed(2) } on the {rule.dayOfMonth}th of every month
-                    </span>
-                    <span className="text-[11px] text-gold-light">
-                      Last applied: {rule.lastAppliedDate || 'Pending first run'}
-                    </span>
-                  </div>
-                ))}
+              <div className="mt-2 space-y-1.5">
+                {activeRules.map((rule) => {
+                  const srcAcc = accounts.find((a) => a.id === rule.sourceAccountId);
+                  return (
+                    <div key={rule.id} className="flex items-center justify-between text-xs text-[#f5f3ef]">
+                      <div className="flex items-center gap-2">
+                        <span className={rule.active ? '' : 'line-through text-[#716c64]'}>
+                          Move {formatMoney(rule.amountCents, selectedFund.currency)} on day {rule.dayOfMonth}
+                          {srcAcc ? ` from ${srcAcc.name}` : ''}
+                        </span>
+                        {!rule.active && (
+                          <span className="rounded bg-[#262930] px-1.5 py-0.5 text-[10px] text-[#9e9a93]">
+                            Paused
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-gold-light">
+                          Last: {rule.lastAppliedDate || 'Pending first run'}
+                        </span>
+                        <button
+                          onClick={() => toggleFundAutoRule(rule.id, !rule.active)}
+                          className="rounded p-1 text-[#9e9a93] hover:text-[#f5f3ef]"
+                          title={rule.active ? 'Pause Rule' : 'Resume Rule'}
+                        >
+                          {rule.active ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3 text-gold-light" />}
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (confirm('Delete this automated recurring rule?')) {
+                              await deleteFundAutoRule(rule.id);
+                            }
+                          }}
+                          className="rounded p-1 text-rose-400 hover:text-rose-300"
+                          title="Delete Rule"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -282,37 +404,53 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
             </h4>
             <div className="divide-y divide-[#262930] rounded-xl border border-[#262930] bg-[#0b0d10]/60">
               {activeAllocations.length > 0 ? (
-                activeAllocations.map((alloc) => (
-                  <div key={alloc.id} className="flex items-center justify-between p-3 text-xs">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`flex h-8 w-8 items-center justify-center rounded-lg ${
-                          alloc.type === 'deposit'
-                            ? 'bg-gain/15 text-gain'
-                            : 'bg-loss/15 text-loss'
-                        }`}
-                      >
-                        {alloc.type === 'deposit' ? <ArrowDownLeft className="h-4 w-4" /> : <ArrowUpRight className="h-4 w-4" />}
-                      </div>
-                      <div>
-                        <div className="font-semibold text-[#f5f3ef] capitalize">{alloc.type}</div>
-                        <div className="text-[11px] text-[#9e9a93]">
-                          {alloc.date} {alloc.note && `• ${alloc.note}`}
+                activeAllocations.map((alloc) => {
+                  const srcAcc = accounts.find((a) => a.id === alloc.sourceAccountId);
+                  return (
+                    <div key={alloc.id} className="flex items-center justify-between p-3 text-xs">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`flex h-8 w-8 items-center justify-center rounded-lg ${
+                            alloc.type === 'deposit'
+                              ? 'bg-gain/15 text-gain'
+                              : 'bg-loss/15 text-loss'
+                          }`}
+                        >
+                          {alloc.type === 'deposit' ? <ArrowDownLeft className="h-4 w-4" /> : <ArrowUpRight className="h-4 w-4" />}
+                        </div>
+                        <div>
+                          <div className="font-semibold text-[#f5f3ef] capitalize">
+                            {alloc.type}
+                            {srcAcc && <span className="font-normal text-[#9e9a93]"> ({srcAcc.name})</span>}
+                          </div>
+                          <div className="text-[11px] text-[#9e9a93]">
+                            {alloc.date} {alloc.note && `• ${alloc.note}`}
+                          </div>
                         </div>
                       </div>
+
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`text-sm font-bold ${
+                            alloc.type === 'deposit' ? 'text-gain' : 'text-loss'
+                          }`}
+                        >
+                          {alloc.type === 'deposit' ? '+' : '-'}{formatMoney(alloc.amountCents, selectedFund.currency)}
+                        </div>
+                        <button
+                          onClick={() => setDeleteConfirmAlloc(alloc)}
+                          className="rounded p-1 text-[#716c64] hover:text-rose-400 transition-colors"
+                          title="Delete Allocation (Reverses effect on fund & account)"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </div>
-                    <div
-                      className={`text-sm font-bold ${
-                        alloc.type === 'deposit' ? 'text-gain' : 'text-loss'
-                      }`}
-                    >
-                      {alloc.type === 'deposit' ? '+' : '-'}${(alloc.amountCents / 100).toFixed(2)}
-                    </div>
-                  </div>
-                ))
+                  );
+                })
               ) : (
                 <div className="p-6 text-center text-xs text-[#9e9a93]">
-                  No allocations yet. Deposit funds to start saving towards this goal.
+                  No allocations yet. Deposit funds from an account to start saving toward this goal.
                 </div>
               )}
             </div>
@@ -320,7 +458,7 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
         </div>
       ) : (
         <div className="rounded-2xl border border-[#262930] bg-[#111419]/40 p-12 text-center text-xs text-[#9e9a93]">
-          No sinking funds created. Click &quot;Create New Fund&quot; to set up an Emergency Fund, Vacation Fund, or Investment Fund.
+          No sinking funds created. Click &quot;Create New Fund&quot; to set up an Emergency Fund, Vacation Fund, or House Fund.
         </div>
       )}
 
@@ -362,12 +500,13 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
                 <div>
                   <label className="text-xs text-[#9e9a93]">Currency</label>
                   <select
-                    value={currency}
-                    onChange={(e) => setCurrency(e.target.value as 'USD' | 'INR')}
+                    value={fundCurrency}
+                    onChange={(e) => setFundCurrency(e.target.value)}
                     className="mt-1 w-full rounded-xl border border-[#262930] bg-[#0b0d10] px-3 py-2 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
                   >
-                    <option value="USD">USD ($)</option>
-                    <option value="INR">INR (₹)</option>
+                    {SUPPORTED_CURRENCIES.map((c) => (
+                      <option key={c.code} value={c.code}>{c.code} ({c.symbol})</option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -403,35 +542,143 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
         </div>
       )}
 
-      {/* ALLOCATE MODAL */}
+      {/* EDIT FUND MODAL */}
+      {editingFund && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0b0d10]/80 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-[#262930] bg-[#111419] p-6 shadow-2xl">
+            <h3 className="text-base font-bold text-[#f5f3ef]">Edit Sinking Fund</h3>
+            <form onSubmit={handleSaveEditFund} className="mt-4 space-y-3">
+              <div>
+                <label className="text-xs text-[#9e9a93]">Fund Name</label>
+                <input
+                  type="text"
+                  required
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-[#262930] bg-[#0b0d10] px-3 py-2 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-[#9e9a93]">Target Amount</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    value={editTargetAmount}
+                    onChange={(e) => setEditTargetAmount(e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-[#262930] bg-[#0b0d10] px-3 py-2 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-[#9e9a93]">Currency</label>
+                  <select
+                    value={editCurrency}
+                    onChange={(e) => setEditCurrency(e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-[#262930] bg-[#0b0d10] px-3 py-2 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
+                  >
+                    {SUPPORTED_CURRENCIES.map((c) => (
+                      <option key={c.code} value={c.code}>{c.code} ({c.symbol})</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs text-[#9e9a93]">Target Date</label>
+                <input
+                  type="date"
+                  required
+                  value={editTargetDate}
+                  onChange={(e) => setEditTargetDate(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-[#262930] bg-[#0b0d10] px-3 py-2 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
+                />
+              </div>
+
+              <div className="mt-5 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingFund(null)}
+                  className="rounded-xl px-4 py-2 text-xs text-[#9e9a93] hover:text-[#f5f3ef]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-xl bg-gradient-to-r from-gold to-gold-light px-4 py-2 text-xs font-semibold text-[#0b0d10] hover:brightness-110"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ALLOCATE MODAL (Fix 18: requires source bank account + atomic balance checks) */}
       {isAllocateModalOpen && selectedFund && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0b0d10]/80 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-2xl border border-[#262930] bg-[#111419] p-6 shadow-2xl">
             <h3 className="text-base font-bold text-[#f5f3ef]">Allocate Money: {selectedFund.name}</h3>
+            <p className="mt-1 text-xs text-[#9e9a93]">
+              Transfers move money between your chosen source account and this sinking fund.
+            </p>
+
+            {allocError && (
+              <div className="mt-3 flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-300">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>{allocError}</span>
+              </div>
+            )}
+
             <form onSubmit={handleAllocate} className="mt-4 space-y-3">
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => setAllocType('deposit')}
+                  onClick={() => {
+                    setAllocType('deposit');
+                    setAllocError(null);
+                  }}
                   className={`flex-1 rounded-xl py-2 text-xs font-semibold transition-all ${
                     allocType === 'deposit'
                       ? 'bg-gradient-to-r from-gold to-gold-light text-[#0b0d10]'
                       : 'border border-[#262930] bg-[#0b0d10] text-[#9e9a93]'
                   }`}
                 >
-                  Deposit
+                  Deposit (Account → Fund)
                 </button>
                 <button
                   type="button"
-                  onClick={() => setAllocType('withdraw')}
+                  onClick={() => {
+                    setAllocType('withdraw');
+                    setAllocError(null);
+                  }}
                   className={`flex-1 rounded-xl py-2 text-xs font-semibold transition-all ${
                     allocType === 'withdraw'
                       ? 'bg-loss text-white'
                       : 'border border-[#262930] bg-[#0b0d10] text-[#9e9a93]'
                   }`}
                 >
-                  Withdraw
+                  Withdraw (Fund → Account)
                 </button>
+              </div>
+
+              <div>
+                <label className="text-xs text-[#9e9a93]">
+                  Source Account ({allocType === 'deposit' ? 'Deducted From' : 'Credited To'})
+                </label>
+                <select
+                  value={sourceAccountId}
+                  onChange={(e) => setSourceAccountId(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-[#262930] bg-[#0b0d10] px-3 py-2 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
+                >
+                  {liquidAccounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name} — Balance: {formatMoney(a.balanceCents, a.currency)}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>
@@ -484,12 +731,27 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
           <div className="w-full max-w-md rounded-2xl border border-[#262930] bg-[#111419] p-6 shadow-2xl">
             <h3 className="text-base font-bold text-[#f5f3ef]">Create Auto-Rule: {selectedFund.name}</h3>
             <p className="mt-1 text-xs text-[#9e9a93]">
-              E.g. &quot;Move $200 on the 1st of every month&quot;. Rules execute on app launch with automatic catch-up.
+              Rules execute on app launch with automatic catch-up across missed months.
             </p>
 
             <form onSubmit={handleCreateRule} className="mt-4 space-y-3">
               <div>
-                <label className="text-xs text-[#9e9a93]">Monthly Transfer Amount ($ USD)</label>
+                <label className="text-xs text-[#9e9a93]">Source Account</label>
+                <select
+                  value={ruleSourceAccountId}
+                  onChange={(e) => setRuleSourceAccountId(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-[#262930] bg-[#0b0d10] px-3 py-2 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
+                >
+                  {liquidAccounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name} ({a.type})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs text-[#9e9a93]">Monthly Transfer Amount ({selectedFund.currency})</label>
                 <input
                   type="number"
                   step="0.01"
@@ -530,6 +792,70 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE CONFIRM FUND MODAL */}
+      {deleteConfirmFund && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0b0d10]/80 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl border border-[#262930] bg-[#111419] p-6 shadow-2xl">
+            <h4 className="text-sm font-bold text-[#f5f3ef]">Delete Sinking Fund</h4>
+            <p className="mt-2 text-xs text-[#c8c4bc]">
+              Are you sure you want to delete <strong className="text-gold-light">{deleteConfirmFund.name}</strong>?
+            </p>
+            <p className="mt-1 text-[11px] text-[#716c64]">
+              This removes the fund and its target from your calculations. (Current balance: {formatMoney(deleteConfirmFund.currentAmountCents, deleteConfirmFund.currency)})
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                onClick={() => setDeleteConfirmFund(null)}
+                className="rounded-lg px-3 py-1.5 text-xs text-[#9e9a93] hover:text-[#f5f3ef]"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  await deleteFund(deleteConfirmFund.id);
+                  setDeleteConfirmFund(null);
+                }}
+                className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-500"
+              >
+                Delete Fund
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE CONFIRM ALLOCATION MODAL */}
+      {deleteConfirmAlloc && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0b0d10]/80 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl border border-[#262930] bg-[#111419] p-6 shadow-2xl">
+            <h4 className="text-sm font-bold text-[#f5f3ef]">Delete Allocation</h4>
+            <p className="mt-2 text-xs text-[#c8c4bc]">
+              Delete this {deleteConfirmAlloc.type} of <strong className="text-gold-light">{formatMoney(deleteConfirmAlloc.amountCents, selectedFund?.currency || 'USD')}</strong>?
+            </p>
+            <p className="mt-1 text-[11px] text-[#716c64]">
+              This will automatically reverse the balance change on both the fund and the source account.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                onClick={() => setDeleteConfirmAlloc(null)}
+                className="rounded-lg px-3 py-1.5 text-xs text-[#9e9a93] hover:text-[#f5f3ef]"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  await deleteFundAllocation(deleteConfirmAlloc.id);
+                  setDeleteConfirmAlloc(null);
+                }}
+                className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-500"
+              >
+                Reverse & Delete
+              </button>
+            </div>
           </div>
         </div>
       )}

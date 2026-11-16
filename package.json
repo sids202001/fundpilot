@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "verify": "tsx scripts/verify_acceptance.ts"
   },
   "dependencies": {
     "@react-three/drei": "9.121.5",
@@ -30,6 +31,7 @@
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.14",
+    "tsx": "^4.23.15",
     "typescript": "^5.6.3"
   }
 }

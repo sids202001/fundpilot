@@ -1,6 +1,7 @@
-// On-Device AI Auto-Categorization Engine
-// Zero network requests — 100% on-device
-// High-confidence pattern classifier + global user category rules engine
+// On-Device Keyword Categorization Engine
+// Zero network requests — runs 100% locally on-device.
+// Rule-based classification: User-defined rules first, followed by deterministic keyword matching.
+// No inflated AI claims.
 
 import { CategoryRule } from './types';
 
@@ -82,7 +83,7 @@ const CATEGORY_MATCHERS: KeywordMatcher[] = [
 export function categorizeMerchant(
   merchant: string,
   userRules: CategoryRule[] = []
-): { category: string; confidence: number; source: 'rule' | 'ai' } {
+): { category: string; confidence: number; source: 'rule' | 'keyword' } {
   const normMerchant = merchant.toLowerCase().trim();
 
   // 1. Check User-defined Global Rules first (100% confidence)
@@ -96,23 +97,23 @@ export function categorizeMerchant(
     }
   }
 
-  // 2. On-Device Keyword/Semantic Matcher
+  // 2. Deterministic Keyword Rules
   for (const matcher of CATEGORY_MATCHERS) {
     for (const kw of matcher.keywords) {
       if (normMerchant.includes(kw)) {
         return {
           category: matcher.category,
           confidence: matcher.confidence,
-          source: 'ai',
+          source: 'keyword',
         };
       }
     }
   }
 
-  // 3. Fallback
+  // 3. Fallback for unknown merchants: labeled honestly as keyword with 0 confidence
   return {
     category: 'Miscellaneous',
-    confidence: 0.50,
-    source: 'ai',
+    confidence: 0.0,
+    source: 'keyword',
   };
 }

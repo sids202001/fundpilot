@@ -2,41 +2,52 @@
 
 import React, { useState } from 'react';
 import { useStore } from '@/lib/store';
-import { ArrowUpRight, Edit3, Check, Calculator } from 'lucide-react';
+import { formatMoney } from '@/lib/currencies';
+import { ArrowUpRight, ArrowDownRight, Edit3, Check, Calculator } from 'lucide-react';
 
 export function NetWorthSummary() {
   const {
     totalNetWorthCents,
+    totalBankCashCents,
     totalFundsCents,
-    totalPortfolioCents,
-    creditCardOwedCents,
+    totalInvestmentsCents,
+    totalCreditOwedCents,
     safeToSpendMonthCents,
     settings,
     updateSettings,
     expenses,
     fundAllocations,
+    displayCurrency,
   } = useStore();
 
-  const [isEditingCash, setIsEditingCash] = useState(false);
-  const [bankCashInput, setBankCashInput] = useState((settings.bankCashCents / 100).toString());
-  const [creditOwedInput, setCreditOwedInput] = useState((settings.creditCardOwedCents / 100).toString());
-  const [incomeInput, setIncomeInput] = useState((settings.monthlyIncomeCents / 100).toString());
-  const [fixedBillsInput, setFixedBillsInput] = useState((settings.fixedBillsCents / 100).toString());
+  const [isEditingSettings, setIsEditingSettings] = useState(false);
+  const [bankCashInput, setBankCashInput] = useState(((settings.bankCashCents || 0) / 100).toString());
+  const [creditOwedInput, setCreditOwedInput] = useState(((settings.creditCardOwedCents || 0) / 100).toString());
+  const [incomeInput, setIncomeInput] = useState(((settings.monthlyIncomeCents || 0) / 100).toString());
+  const [fixedBillsInput, setFixedBillsInput] = useState(((settings.fixedBillsCents || 0) / 100).toString());
 
   const currentMonth = new Date().toISOString().substring(0, 7);
+
+  // Spend this month (debit expenses only)
   const spentThisMonthCents = expenses
-    .filter((e) => e.date.startsWith(currentMonth))
+    .filter((e) => e.date.startsWith(currentMonth) && (e.entryType || 'debit') === 'debit')
+    .reduce((sum, e) => sum + e.amountCents, 0);
+
+  // Inflow credits this month
+  const creditsThisMonthCents = expenses
+    .filter((e) => e.date.startsWith(currentMonth) && e.entryType === 'credit')
     .reduce((sum, e) => sum + e.amountCents, 0);
 
   const fundAllocationsThisMonthCents = fundAllocations
     .filter((a) => a.date.startsWith(currentMonth) && a.type === 'deposit')
     .reduce((sum, a) => sum + a.amountCents, 0);
 
-  const totalMonthlyOutflowCents = spentThisMonthCents + settings.fixedBillsCents;
-  const netSavedMonthCents = Math.max(0, settings.monthlyIncomeCents - totalMonthlyOutflowCents);
+  const totalMonthlyInflowsCents = (settings.monthlyIncomeCents || 0) + creditsThisMonthCents;
+  const totalMonthlyOutflowCents = spentThisMonthCents + (settings.fixedBillsCents || 0);
+  const netSavedMonthCents = Math.max(0, totalMonthlyInflowsCents - totalMonthlyOutflowCents);
   const savingsRatePct =
-    settings.monthlyIncomeCents > 0
-      ? Math.round((netSavedMonthCents / settings.monthlyIncomeCents) * 100)
+    totalMonthlyInflowsCents > 0
+      ? Math.round((netSavedMonthCents / totalMonthlyInflowsCents) * 100)
       : 0;
 
   const handleSaveSettings = () => {
@@ -51,14 +62,8 @@ export function NetWorthSummary() {
       monthlyIncomeCents: isNaN(incCents) ? 0 : incCents,
       fixedBillsCents: isNaN(billsCents) ? 0 : billsCents,
     });
-    setIsEditingCash(false);
+    setIsEditingSettings(false);
   };
-
-  const cashDollars = settings.bankCashCents / 100;
-  const fundsDollars = totalFundsCents / 100;
-  const portDollars = totalPortfolioCents / 100;
-  const creditDollars = creditCardOwedCents / 100;
-  const netWorthDollars = totalNetWorthCents / 100;
 
   return (
     <div className="space-y-4">
@@ -70,29 +75,29 @@ export function NetWorthSummary() {
             <span className="font-semibold uppercase tracking-wider text-[#d4af37]">Total Net Worth</span>
             <button
               onClick={() => {
-                setBankCashInput((settings.bankCashCents / 100).toString());
-                setCreditOwedInput((settings.creditCardOwedCents / 100).toString());
-                setIncomeInput((settings.monthlyIncomeCents / 100).toString());
-                setFixedBillsInput((settings.fixedBillsCents / 100).toString());
-                setIsEditingCash(!isEditingCash);
+                setBankCashInput(((settings.bankCashCents || 0) / 100).toString());
+                setCreditOwedInput(((settings.creditCardOwedCents || 0) / 100).toString());
+                setIncomeInput(((settings.monthlyIncomeCents || 0) / 100).toString());
+                setFixedBillsInput(((settings.fixedBillsCents || 0) / 100).toString());
+                setIsEditingSettings(!isEditingSettings);
               }}
               className="rounded-lg p-1 text-[#9e9a93] hover:bg-[#1a1d24] hover:text-[#d4af37] transition-colors"
-              title="Edit Bank Cash & Inflows"
+              title="Quick Adjust Inflows & Cash"
             >
               <Edit3 className="h-4 w-4" />
             </button>
           </div>
           <div className="mt-3 text-3xl font-extrabold tracking-tight text-[#f5f3ef]">
-            ${netWorthDollars.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            {formatMoney(totalNetWorthCents, displayCurrency || 'USD')}
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-1.5 text-[11px] text-[#9e9a93]">
-            <span>Cash: <strong className="text-[#e5c07b]">${cashDollars.toLocaleString('en-US', { minimumFractionDigits: 0 })}</strong></span>
+            <span>Cash: <strong className="text-[#e5c07b]">{formatMoney(totalBankCashCents, displayCurrency || 'USD')}</strong></span>
             <span className="text-[#3a3f4d]">•</span>
-            <span>Funds: <strong className="text-[#d4af37]">${fundsDollars.toLocaleString('en-US', { minimumFractionDigits: 0 })}</strong></span>
+            <span>Funds: <strong className="text-[#d4af37]">{formatMoney(totalFundsCents, displayCurrency || 'USD')}</strong></span>
             <span className="text-[#3a3f4d]">•</span>
-            <span>Port: <strong className="text-[#22c55e]">${portDollars.toLocaleString('en-US', { minimumFractionDigits: 0 })}</strong></span>
+            <span>Inv: <strong className="text-gain">{formatMoney(totalInvestmentsCents, displayCurrency || 'USD')}</strong></span>
             <span className="text-[#3a3f4d]">•</span>
-            <span>Credit: <strong className="text-[#ef4444]">-${creditDollars.toLocaleString('en-US', { minimumFractionDigits: 0 })}</strong></span>
+            <span>Credit: <strong className="text-loss">-{formatMoney(totalCreditOwedCents, displayCurrency || 'USD')}</strong></span>
           </div>
           <div className="absolute right-0 top-0 h-1 w-full bg-gradient-to-r from-[#d4af37] via-[#f3d99b] to-[#b8860b]" />
         </div>
@@ -106,10 +111,10 @@ export function NetWorthSummary() {
             </span>
           </div>
           <div className="mt-3 text-3xl font-extrabold tracking-tight text-[#4ade80]">
-            ${(safeToSpendMonthCents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            {formatMoney(safeToSpendMonthCents, displayCurrency || 'USD')}
           </div>
           <p className="mt-4 text-[11px] text-[#9e9a93]">
-            Income − Fixed bills − Fund deposits − Already spent
+            Income − Fixed bills − Sinking deposits − Debit spent
           </p>
           <div className="absolute right-0 top-0 h-1 w-full bg-[#22c55e]" />
         </div>
@@ -124,11 +129,11 @@ export function NetWorthSummary() {
             </div>
           </div>
           <div className="mt-3 text-3xl font-extrabold tracking-tight text-[#f5f3ef]">
-            ${(netSavedMonthCents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            {formatMoney(netSavedMonthCents, displayCurrency || 'USD')}
           </div>
           <div className="mt-4 flex items-center justify-between text-[11px] text-[#9e9a93]">
-            <span>Inflows: ${(settings.monthlyIncomeCents / 100).toFixed(0)}</span>
-            <span>Outflows: ${(totalMonthlyOutflowCents / 100).toFixed(0)}</span>
+            <span>Inflows: {formatMoney(totalMonthlyInflowsCents, displayCurrency || 'USD')}</span>
+            <span>Outflows: {formatMoney(totalMonthlyOutflowCents, displayCurrency || 'USD')}</span>
           </div>
           <div className="absolute right-0 top-0 h-1 w-full bg-[#d4af37]" />
         </div>
@@ -142,10 +147,10 @@ export function NetWorthSummary() {
             </span>
           </div>
           <div className="mt-3 text-3xl font-extrabold tracking-tight text-[#f3d99b]">
-            ${fundsDollars.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            {formatMoney(totalFundsCents, displayCurrency || 'USD')}
           </div>
           <p className="mt-4 text-[11px] text-[#9e9a93]">
-            Protected from discretionary spendable cash everywhere
+            Segregated from spendable cash across all sinking funds
           </p>
           <div className="absolute right-0 top-0 h-1 w-full bg-[#d4af37]" />
         </div>
@@ -157,27 +162,27 @@ export function NetWorthSummary() {
           <Calculator className="h-3.5 w-3.5 text-[#d4af37]" />
           <span className="font-semibold text-[#f5f3ef]">Net Worth Formula:</span>
           <span>
-            <span className="text-[#e5c07b] font-medium">Bank Cash (${cashDollars.toFixed(0)})</span> +{' '}
-            <span className="text-[#d4af37] font-medium">Sinking Funds (${fundsDollars.toFixed(0)})</span> +{' '}
-            <span className="text-[#22c55e] font-medium">Portfolio (${portDollars.toFixed(0)})</span> −{' '}
-            <span className="text-[#ef4444] font-medium">Credit Owed (${creditDollars.toFixed(0)})</span> ={' '}
-            <strong className="text-[#f5f3ef]">${netWorthDollars.toFixed(2)}</strong>
+            <span className="text-[#e5c07b] font-medium">Bank/Cash ({formatMoney(totalBankCashCents, displayCurrency || 'USD')})</span> +{' '}
+            <span className="text-[#d4af37] font-medium">Sinking Funds ({formatMoney(totalFundsCents, displayCurrency || 'USD')})</span> +{' '}
+            <span className="text-gain font-medium">Investments ({formatMoney(totalInvestmentsCents, displayCurrency || 'USD')})</span> −{' '}
+            <span className="text-loss font-medium">Credit Debt ({formatMoney(totalCreditOwedCents, displayCurrency || 'USD')})</span> ={' '}
+            <strong className="text-[#f5f3ef]">{formatMoney(totalNetWorthCents, displayCurrency || 'USD')}</strong>
           </span>
         </div>
-        <span className="text-[10px] text-[#606b7d] font-mono">
+        <span className="text-[10px] text-[#716c64] font-mono">
           Integer-Cent Accuracy Guaranteed
         </span>
       </div>
 
-      {/* Inline Quick Cash & Inflow Editor */}
-      {isEditingCash && (
-        <div className="rounded-2xl border border-[#2c323f] bg-[#171a21] p-5 shadow-2xl">
+      {/* Inline Quick Settings Editor */}
+      {isEditingSettings && (
+        <div className="rounded-2xl border border-[#262930] bg-[#171a21] p-5 shadow-2xl">
           <div className="mb-4 flex items-center justify-between">
             <h4 className="text-xs font-semibold uppercase tracking-wider text-[#d4af37]">
-              Adjust Bank Cash, Credit Card Debt & Monthly Cash Flow
+              Adjust Vault Inflows & Fallback Balances
             </h4>
             <button
-              onClick={() => setIsEditingCash(false)}
+              onClick={() => setIsEditingSettings(false)}
               className="text-xs text-[#9e9a93] hover:text-[#f5f3ef]"
             >
               Cancel

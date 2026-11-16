@@ -4,19 +4,18 @@ import React, { useState, useEffect } from 'react';
 import { useStore } from '@/lib/store';
 import { isWebGLAvailable } from '@/lib/webgl';
 import { LockScreen } from '@/components/LockScreen';
-import { Navbar } from '@/components/Navbar';
+import { Navbar, AppNavTab } from '@/components/Navbar';
 import { NetWorthSummary } from '@/components/dashboard/NetWorthSummary';
 import { FinanceScene } from '@/components/3d/FinanceScene';
 import { Dashboard2D } from '@/components/2d/Dashboard2D';
 import { ExpenseModule } from '@/components/expenses/ExpenseModule';
 import { FundsModule } from '@/components/funds/FundsModule';
-import { PortfolioModule } from '@/components/portfolio/PortfolioModule';
-import { BackupModal } from '@/components/common/BackupModal';
+import { InvestmentsModule } from '@/components/investments/InvestmentsModule';
+import { SettingsView } from '@/components/settings/SettingsView';
 
 export default function Home() {
   const { isVaultReady, isLocked, settings } = useStore();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'expenses' | 'funds' | 'portfolio'>('dashboard');
-  const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<AppNavTab>('dashboard');
   const [isWebGLSupported, setIsWebGLSupported] = useState<boolean>(true);
 
   // Check hardware/browser WebGL capability on mount
@@ -24,10 +23,19 @@ export default function Home() {
     setIsWebGLSupported(isWebGLAvailable());
   }, []);
 
+  // Register service worker on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch((err) => {
+        console.warn('Service worker registration failed:', err);
+      });
+    }
+  }, []);
+
   // Selected drill-down states from 3D/2D clicks
   const [drillCategory, setDrillCategory] = useState<string | null>(null);
   const [drillFundId, setDrillFundId] = useState<string | null>(null);
-  const [drillTicker, setDrillTicker] = useState<string | null>(null);
+  const [drillInvestmentId, setDrillInvestmentId] = useState<string | null>(null);
 
   if (!isVaultReady) {
     return (
@@ -54,9 +62,13 @@ export default function Home() {
     setActiveTab('funds');
   };
 
-  const handleSelectHolding = (ticker: string) => {
-    setDrillTicker(ticker);
-    setActiveTab('portfolio');
+  const handleSelectInvestment = (id: string) => {
+    setDrillInvestmentId(id);
+    setActiveTab('investments');
+  };
+
+  const handleSelectMonthFilter = (monthStr: string) => {
+    setActiveTab('expenses');
   };
 
   return (
@@ -65,13 +77,12 @@ export default function Home() {
       <Navbar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
-        openBackupModal={() => setIsBackupModalOpen(true)}
       />
 
       {/* Main Content Area */}
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 space-y-6">
-        {/* Universal Financial Summary Headline */}
-        <NetWorthSummary />
+        {/* Universal Financial Summary Headline (Shown on Dashboard) */}
+        {activeTab === 'dashboard' && <NetWorthSummary />}
 
         {/* Tab 1: Dashboard (Unified 3D Scene or 2D Recharts) */}
         {activeTab === 'dashboard' && (
@@ -80,32 +91,38 @@ export default function Home() {
               <FinanceScene
                 onSelectCategory={handleSelectCategory}
                 onSelectFund={handleSelectFund}
-                onSelectHolding={handleSelectHolding}
+                onSelectInvestment={handleSelectInvestment}
                 onWebGLFailed={() => setIsWebGLSupported(false)}
               />
             ) : (
               <Dashboard2D
                 onSelectCategory={handleSelectCategory}
                 onSelectFund={handleSelectFund}
-                onSelectHolding={handleSelectHolding}
+                onSelectInvestment={handleSelectInvestment}
+                onSelectMonthFilter={handleSelectMonthFilter}
               />
             )}
           </div>
         )}
 
-        {/* Tab 2: Expense Tracker (Module A) */}
+        {/* Tab 2: Expense Tracker */}
         {activeTab === 'expenses' && (
           <ExpenseModule filterCategory={drillCategory} />
         )}
 
-        {/* Tab 3: Funds & Goals (Module B) */}
+        {/* Tab 3: Sinking Funds */}
         {activeTab === 'funds' && (
           <FundsModule selectedFundId={drillFundId} />
         )}
 
-        {/* Tab 4: Portfolio Manager (Module C) */}
-        {activeTab === 'portfolio' && (
-          <PortfolioModule selectedTicker={drillTicker} />
+        {/* Tab 4: Manual Investments */}
+        {activeTab === 'investments' && (
+          <InvestmentsModule selectedId={drillInvestmentId} />
+        )}
+
+        {/* Tab 5: Settings & Sync */}
+        {activeTab === 'settings' && (
+          <SettingsView />
         )}
       </main>
 
@@ -113,12 +130,6 @@ export default function Home() {
       <footer className="border-t border-[#1e222b] bg-[#0b0d10]/90 py-4 text-center text-[11px] text-[#9e9a93]">
         FundPilot • 100% Local-First • AES-GCM Encrypted at Rest • Zero Telemetry
       </footer>
-
-      {/* Backup and Vault Settings Modal */}
-      <BackupModal
-        isOpen={isBackupModalOpen}
-        onClose={() => setIsBackupModalOpen(false)}
-      />
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Text } from '@react-three/drei';
 import * as THREE from 'three';
 import { useStore } from '@/lib/store';
+import { formatMoney, convertCurrency } from '@/lib/currencies';
 import {
   Compass,
   PieChart,
@@ -12,29 +13,28 @@ import {
   PiggyBank,
   TrendingUp,
   Sparkles,
-  Eye,
   Bot,
   Layers,
+  AlertTriangle,
+  Smile,
 } from 'lucide-react';
 
-export type SceneFocusMode = 'overview' | 'expenses' | 'funds' | 'portfolio' | 'mascot-close';
+export type SceneFocusMode = 'overview' | 'expenses' | 'funds' | 'investments' | 'mascot-close';
 
 // ============================================================================
 // 1. ORIGINAL 3D AVATAR MASCOT: "Aero" — The Wealth Navigator Drone
-// Designed from scratch: A sleek aerodynamic celestial automaton.
-// Charcoal titanium chassis + Champagne gold astrolabe gyro ring + Visor eyes.
-// Zero human caricature, zero assets from any external site.
+// RENDERED EXCLUSIVELY IN 'mascot-close' (Meet Aero) VIEW (Fix 14)
+// Sleek aerodynamic automaton with 3 reactive financial states:
+// - Celebration (savings >= 20% or net worth high): Bright radiant gold eyes, celebratory bobbing
+// - Caution (safe-to-spend < $200 or credit debt > bank cash): Alert amber visor eyes
+// - Guidance (normal/reconciled): Serene champagne gold, calm steady gyroscopic orbit
 // ============================================================================
 function AeroMascotCompanion({
-  focusMode,
   reducedMotion,
-  totalNetWorthCents,
-  safeToSpendMonthCents,
+  reactiveState,
 }: {
-  focusMode: SceneFocusMode;
   reducedMotion: boolean;
-  totalNetWorthCents: number;
-  safeToSpendMonthCents: number;
+  reactiveState: 'celebration' | 'caution' | 'guidance';
 }) {
   const groupRef = useRef<THREE.Group>(null);
   const ringRef = useRef<THREE.Mesh>(null);
@@ -42,59 +42,51 @@ function AeroMascotCompanion({
   const rightEyeRef = useRef<THREE.Mesh>(null);
   const thrusterRef = useRef<THREE.PointLight>(null);
 
-  // Dynamic target positioning for Aero depending on current scene focus
-  const targetPos = useMemo(() => {
-    switch (focusMode) {
-      case 'overview':
-        return new THREE.Vector3(1.75, 1.15, 0.4);
-      case 'expenses':
-        return new THREE.Vector3(0.5, 1.4, 2.8);
-      case 'funds':
-        return new THREE.Vector3(0.7, 3.8, 1.2);
-      case 'portfolio':
-        return new THREE.Vector3(2.5, 1.8, 0.4);
-      case 'mascot-close':
-        return new THREE.Vector3(0, 0, 0); // Centers in close-up view
+  const eyeColor = useMemo(() => {
+    switch (reactiveState) {
+      case 'celebration':
+        return '#fef08a'; // Bright vibrant gold
+      case 'caution':
+        return '#f59e0b'; // Amber warning
+      case 'guidance':
+      default:
+        return '#f3d99b'; // Calm champagne
     }
-  }, [focusMode]);
+  }, [reactiveState]);
 
   useFrame((state, delta) => {
     if (!groupRef.current) return;
 
     if (reducedMotion) {
-      groupRef.current.position.copy(targetPos);
-      groupRef.current.rotation.set(0, -0.2, 0);
+      groupRef.current.position.set(0, 0, 0);
+      groupRef.current.rotation.set(0, 0, 0);
       return;
     }
 
     const time = state.clock.elapsedTime;
+    const speedMultiplier = reactiveState === 'celebration' ? 1.5 : reactiveState === 'caution' ? 1.2 : 0.8;
 
-    // Smooth lerp transition to target position
-    const lerpFactor = Math.min(1, delta * 3.2);
-    groupRef.current.position.lerp(targetPos, lerpFactor);
+    // Hover bobbing
+    const bobOffset = Math.sin(time * 2.4 * speedMultiplier) * (reactiveState === 'celebration' ? 0.12 : 0.06);
+    groupRef.current.position.y = bobOffset;
 
-    // Subtle gentle vertical hover bobbing
-    const bobOffset = Math.sin(time * 2.4) * 0.08;
-    groupRef.current.position.y += bobOffset * 0.08;
+    // Yaw rotation
+    groupRef.current.rotation.y = time * 0.35;
+    groupRef.current.rotation.z = Math.sin(time * 1.5) * 0.04;
 
-    // Aerodynamic banking & yaw rotation
-    const baseRotationY = focusMode === 'mascot-close' ? time * 0.4 : -0.25 + Math.sin(time * 1.1) * 0.12;
-    groupRef.current.rotation.y = baseRotationY;
-    groupRef.current.rotation.z = Math.sin(time * 1.8) * 0.05; // Gentle wing tilt
-
-    // Rotating Champagne Gold Astrolabe Stabilizer Ring
+    // Rotating Astrolabe Gyroscopic Ring
     if (ringRef.current) {
-      ringRef.current.rotation.z += delta * 1.2;
+      ringRef.current.rotation.z += delta * (reactiveState === 'celebration' ? 1.8 : 1.1);
     }
 
     // Dynamic thruster pulse
     if (thrusterRef.current) {
-      thrusterRef.current.intensity = 0.8 + Math.sin(time * 6.0) * 0.35;
+      thrusterRef.current.intensity = 0.8 + Math.sin(time * 5.0) * 0.35;
     }
   });
 
   return (
-    <group ref={groupRef} scale={focusMode === 'mascot-close' ? 1.6 : 0.95}>
+    <group ref={groupRef} scale={1.5}>
       {/* 1. Central Aerodynamic Fuselage (Titanium Charcoal) */}
       <mesh>
         <sphereGeometry args={[0.38, 32, 24]} />
@@ -102,11 +94,10 @@ function AeroMascotCompanion({
           color="#1e222b"
           roughness={0.22}
           metalness={0.88}
-          envMapIntensity={1.2}
         />
       </mesh>
 
-      {/* 2. Sleek Front Curved Glass Visor (Ink Black) */}
+      {/* 2. Front Curved Glass Visor (Ink Black) */}
       <mesh position={[0, 0.02, 0.26]} rotation={[0.1, 0, 0]}>
         <sphereGeometry args={[0.22, 24, 16, 0, Math.PI * 2, 0, Math.PI * 0.55]} />
         <meshPhysicalMaterial
@@ -117,16 +108,14 @@ function AeroMascotCompanion({
         />
       </mesh>
 
-      {/* 3. Glowing Digital Visor Eyes (Warm Champagne Gold) */}
-      {/* Left Eye */}
+      {/* 3. Reactive Glowing Digital Visor Eyes */}
       <mesh ref={leftEyeRef} position={[-0.09, 0.06, 0.36]}>
         <capsuleGeometry args={[0.022, 0.05, 8, 16]} />
-        <meshBasicMaterial color="#f3d99b" />
+        <meshBasicMaterial color={eyeColor} />
       </mesh>
-      {/* Right Eye */}
       <mesh ref={rightEyeRef} position={[0.09, 0.06, 0.36]}>
         <capsuleGeometry args={[0.022, 0.05, 8, 16]} />
-        <meshBasicMaterial color="#f3d99b" />
+        <meshBasicMaterial color={eyeColor} />
       </mesh>
 
       {/* 4. Astrolabe Gyroscopic Stabilizer Ring (Champagne Gold) */}
@@ -135,71 +124,25 @@ function AeroMascotCompanion({
         <meshStandardMaterial
           color="#d4af37"
           emissive="#d4af37"
-          emissiveIntensity={0.65}
+          emissiveIntensity={reactiveState === 'celebration' ? 0.9 : 0.6}
           roughness={0.15}
           metalness={0.92}
         />
       </mesh>
 
-      {/* Micro-nodes on Astrolabe Ring (Compass points) */}
+      {/* Compass Points */}
       {[0, Math.PI / 2, Math.PI, (3 * Math.PI) / 2].map((angle, idx) => (
-        <mesh
-          key={idx}
-          position={[Math.cos(angle) * 0.54, 0, Math.sin(angle) * 0.54]}
-        >
+        <mesh key={idx} position={[Math.cos(angle) * 0.54, 0, Math.sin(angle) * 0.54]}>
           <sphereGeometry args={[0.035, 12, 12]} />
-          <meshStandardMaterial
-            color="#f3d99b"
-            emissive="#d4af37"
-            emissiveIntensity={1.2}
-          />
+          <meshStandardMaterial color="#f3d99b" metalness={0.9} roughness={0.1} />
         </mesh>
       ))}
 
-      {/* 5. Aerodynamic Swept Winglets (Side Stabilizers) */}
-      {/* Left Wing */}
-      <mesh position={[-0.42, -0.04, -0.06]} rotation={[0.1, 0, -0.3]}>
-        <boxGeometry args={[0.22, 0.025, 0.16]} />
-        <meshStandardMaterial color="#2a2f3a" metalness={0.8} roughness={0.3} />
-      </mesh>
-      <mesh position={[-0.53, -0.01, -0.06]}>
-        <sphereGeometry args={[0.024, 12, 12]} />
-        <meshBasicMaterial color="#d4af37" />
-      </mesh>
-
-      {/* Right Wing */}
-      <mesh position={[0.42, -0.04, -0.06]} rotation={[0.1, 0, 0.3]}>
-        <boxGeometry args={[0.22, 0.025, 0.16]} />
-        <meshStandardMaterial color="#2a2f3a" metalness={0.8} roughness={0.3} />
-      </mesh>
-      <mesh position={[0.53, -0.01, -0.06]}>
-        <sphereGeometry args={[0.024, 12, 12]} />
-        <meshBasicMaterial color="#d4af37" />
-      </mesh>
-
-      {/* 6. Top Navigation Antenna / Celestial Beacon */}
-      <mesh position={[0, 0.44, -0.04]}>
-        <cylinderGeometry args={[0.012, 0.018, 0.14, 16]} />
-        <meshStandardMaterial color="#d4af37" metalness={0.9} roughness={0.2} />
-      </mesh>
-      <mesh position={[0, 0.52, -0.04]}>
-        <sphereGeometry args={[0.032, 16, 16]} />
-        <meshStandardMaterial
-          color="#f3d99b"
-          emissive="#d4af37"
-          emissiveIntensity={1.5}
-        />
-      </mesh>
-
-      {/* 7. Bottom Micro-Thruster Core & Light Wash */}
-      <mesh position={[0, -0.37, 0]}>
-        <cylinderGeometry args={[0.1, 0.06, 0.06, 16]} />
-        <meshStandardMaterial color="#d4af37" metalness={0.9} roughness={0.2} />
-      </mesh>
+      {/* Lower Thruster Beacon */}
       <pointLight
         ref={thrusterRef}
         position={[0, -0.45, 0]}
-        color="#d4af37"
+        color={eyeColor}
         intensity={0.8}
         distance={2.4}
       />
@@ -208,7 +151,7 @@ function AeroMascotCompanion({
 }
 
 // ============================================================================
-// 2. Camera Controller with High-Order Lerp Easing between Quadrants
+// 2. Camera Controller with Lerp Easing between Quadrants
 // ============================================================================
 function CameraController({
   focusMode,
@@ -234,7 +177,7 @@ function CameraController({
         position: new THREE.Vector3(0, 7.6, 4.2),
         target: new THREE.Vector3(0, 0, 0),
       },
-      portfolio: {
+      investments: {
         position: new THREE.Vector3(5.4, 3.8, 3.2),
         target: new THREE.Vector3(3.6, 0.8, -0.2),
       },
@@ -282,7 +225,7 @@ function CameraController({
 // 3. Ambient Warm Champagne Micro-Particle Field
 // ============================================================================
 function AmbientWarmDust({
-  count = 280,
+  count = 240,
   reducedMotion = false,
 }: {
   count?: number;
@@ -345,21 +288,22 @@ function AmbientWarmDust({
 }
 
 // ============================================================================
-// 4. Central Quantum Net Worth Core (Champagne Gold Faceted Core)
+// 4. Central Net Worth Core (Champagne Gold Faceted Core)
 // ============================================================================
 function NetWorthCore({
   totalNetWorthCents,
+  displayCurrency,
   reducedMotion,
   isDimmed,
 }: {
   totalNetWorthCents: number;
+  displayCurrency: string;
   reducedMotion: boolean;
   isDimmed: boolean;
 }) {
   const coreRef = useRef<THREE.Mesh>(null);
   const ring1Ref = useRef<THREE.Mesh>(null);
   const ring2Ref = useRef<THREE.Mesh>(null);
-  const glowRef = useRef<THREE.Mesh>(null);
 
   useFrame((state, delta) => {
     if (!reducedMotion) {
@@ -380,15 +324,12 @@ function NetWorthCore({
     }
   });
 
-  const dollarsFormatted = (totalNetWorthCents / 100).toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  const formattedStr = formatMoney(totalNetWorthCents, displayCurrency);
 
   return (
     <group position={[0, 0, 0]}>
       {/* Outer subtle gold wireframe halo */}
-      <mesh ref={glowRef}>
+      <mesh>
         <sphereGeometry args={[1.22, 32, 32]} />
         <meshBasicMaterial
           color="#d4af37"
@@ -398,7 +339,7 @@ function NetWorthCore({
         />
       </mesh>
 
-      {/* Gyroscopic Concentric Rings (Polished Gold) */}
+      {/* Gyroscopic Concentric Rings */}
       <mesh ref={ring1Ref} rotation={[Math.PI / 4, 0, 0]}>
         <torusGeometry args={[1.44, 0.013, 16, 80]} />
         <meshStandardMaterial
@@ -432,7 +373,7 @@ function NetWorthCore({
         />
       </mesh>
 
-      {/* Primary Net Worth Metric Text */}
+      {/* Metric Label */}
       <Text
         position={[0, -1.45, 0]}
         fontSize={0.25}
@@ -440,7 +381,7 @@ function NetWorthCore({
         anchorX="center"
         anchorY="middle"
       >
-        ${dollarsFormatted}
+        {formattedStr}
       </Text>
       <Text
         position={[0, -1.75, 0]}
@@ -456,14 +397,14 @@ function NetWorthCore({
 }
 
 // ============================================================================
-// 5. Sinking Funds Orbiting Rings (Warm Charcoal + Champagne Gold)
+// 5. Sinking Funds Orbiting Rings
 // ============================================================================
 function FundOrbitRing({
   radius,
   progressRatio,
   name,
-  savedDollars,
-  targetDollars,
+  savedCents,
+  targetCents,
   currency,
   reducedMotion,
   isDimmed,
@@ -472,8 +413,8 @@ function FundOrbitRing({
   radius: number;
   progressRatio: number;
   name: string;
-  savedDollars: number;
-  targetDollars: number;
+  savedCents: number;
+  targetCents: number;
   currency: string;
   reducedMotion: boolean;
   isDimmed: boolean;
@@ -540,13 +481,14 @@ function FundOrbitRing({
 }
 
 // ============================================================================
-// 6. Spending Skyline Bar (South Quadrant — Warm Charcoal & Amber Gold)
+// 6. Spending Skyline Bar (South Quadrant)
 // ============================================================================
 function SkylineBar({
   position,
   category,
   spentCents,
   maxSpentCents,
+  currency,
   isDimmed,
   onClick,
 }: {
@@ -554,6 +496,7 @@ function SkylineBar({
   category: string;
   spentCents: number;
   maxSpentCents: number;
+  currency: string;
   isDimmed: boolean;
   onClick: () => void;
 }) {
@@ -609,47 +552,37 @@ function SkylineBar({
 }
 
 // ============================================================================
-// 7. Portfolio Treemap 3D Block (East Quadrant)
-// STRICT ACCEPTANCE CHECK 6 PRESERVATION:
-// Height formula: max(0.25, min(2.2, 0.35 + (|P&L%| / 25) * 1.0))
-// P&L = 0% -> height = 0.35
-// P&L = +25% -> height = 1.35
-// P&L = -25% -> height = 1.35 (symmetric magnitude)
-// P&L = +50% -> height = 2.20 (clamped max)
-// Color = Refined Emerald (Gain) or Refined Terracotta (Loss)
+// 7. Manual Investments 3D Block (East Quadrant)
+// LOCKED SPEC:
+// One 3D block per entry. Block size = total value ONLY.
+// Gold tones only — NO gain/loss colors, NO P&L height, NO percentages!
+// Height is uniform (0.5), size represents value magnitude.
+// Always shows label and updated date.
 // ============================================================================
-function PortfolioBlock({
+function InvestmentBlock({
   position,
-  ticker,
-  marketValueDollars,
-  gainLossPct,
+  label,
+  type,
+  amountDollars,
+  lastUpdated,
+  currency,
   isDimmed,
   onClick,
 }: {
   position: [number, number, number];
-  ticker: string;
-  marketValueDollars: number;
-  gainLossPct: number;
+  label: string;
+  type: string;
+  amountDollars: number;
+  lastUpdated: string;
+  currency: string;
   isDimmed: boolean;
   onClick: () => void;
 }) {
   const [hovered, setHovered] = useState(false);
 
-  // Block size proportional to position value
-  const size = Math.max(0.5, Math.min(1.4, Math.sqrt(marketValueDollars / 2000) * 0.7));
-
-  // Block height strictly proportional to magnitude of unrealized P&L %
-  const pnlMagnitude = Math.abs(gainLossPct);
-  const height = Math.max(0.25, Math.min(2.2, 0.35 + (pnlMagnitude / 25) * 1.0));
-
-  const isGain = gainLossPct >= 0;
-  const color = isGain
-    ? hovered
-      ? '#4ade80'
-      : '#22c55e' // Refined Warm Emerald
-    : hovered
-    ? '#f87171'
-    : '#ef4444'; // Refined Terracotta
+  // Size strictly proportional to total value magnitude
+  const size = Math.max(0.45, Math.min(1.4, Math.sqrt(Math.max(10, amountDollars) / 1000) * 0.5));
+  const height = 0.5;
 
   return (
     <group
@@ -667,50 +600,63 @@ function PortfolioBlock({
       <mesh>
         <boxGeometry args={[size, height, size]} />
         <meshStandardMaterial
-          color={color}
+          color={hovered ? '#f3d99b' : '#d4af37'}
           roughness={0.2}
-          metalness={0.55}
-          emissive={isGain ? '#16a34a' : '#dc2626'}
-          emissiveIntensity={isDimmed ? 0.12 : hovered ? 0.75 : 0.3}
+          metalness={0.8}
+          emissive="#b8860b"
+          emissiveIntensity={isDimmed ? 0.1 : hovered ? 0.75 : 0.35}
+        />
+      </mesh>
+
+      {/* Top Gold Cap */}
+      <mesh position={[0, height / 2 + 0.01, 0]}>
+        <boxGeometry args={[size * 0.96, 0.02, size * 0.96]} />
+        <meshStandardMaterial
+          color="#fef08a"
+          emissive="#d4af37"
+          emissiveIntensity={hovered ? 0.9 : 0.4}
         />
       </mesh>
 
       <Text
         position={[0, height / 2 + 0.15, 0]}
-        fontSize={0.135}
-        color="#ffffff"
+        fontSize={0.12}
+        color="#f5f3ef"
         anchorX="center"
         anchorY="bottom"
       >
-        {ticker}
+        {label || type}
       </Text>
     </group>
   );
 }
 
 // ============================================================================
-// 8. Main 3D FinanceScene Export
+// 8. Main 3D FinanceScene Export with WebGL Guard & Reactive Aero
 // ============================================================================
 export function FinanceScene({
   onSelectCategory,
   onSelectFund,
-  onSelectHolding,
+  onSelectInvestment,
   onWebGLFailed,
 }: {
   onSelectCategory: (cat: string) => void;
   onSelectFund: (fundId: string) => void;
-  onSelectHolding: (ticker: string) => void;
+  onSelectInvestment: (id: string) => void;
   onWebGLFailed?: () => void;
 }) {
   const {
     totalNetWorthCents,
     totalFundsCents,
-    totalPortfolioCents,
+    totalInvestmentsCents,
+    totalBankCashCents,
+    totalCreditOwedCents,
     safeToSpendMonthCents,
     funds,
     expenses,
-    holdings,
-    quotes,
+    investments,
+    displayCurrency,
+    rates,
     settings,
   } = useStore();
 
@@ -728,12 +674,40 @@ export function FinanceScene({
     return false;
   }, [settings.useReducedMotion]);
 
+  // Reactive State for Aero Companion (Fix 14)
+  const reactiveAeroState = useMemo<'celebration' | 'caution' | 'guidance'>(() => {
+    if (safeToSpendMonthCents < 20000 || totalCreditOwedCents > totalBankCashCents) {
+      return 'caution';
+    }
+    const currentMonth = new Date().toISOString().substring(0, 7);
+    const spentThisMonth = expenses
+      .filter((e) => e.date.startsWith(currentMonth) && (e.entryType || 'debit') === 'debit')
+      .reduce((s, e) => s + e.amountCents, 0);
+    const incomeThisMonth = settings.monthlyIncomeCents;
+    if (incomeThisMonth > 0 && (incomeThisMonth - spentThisMonth) / incomeThisMonth >= 0.2) {
+      return 'celebration';
+    }
+    return 'guidance';
+  }, [safeToSpendMonthCents, totalCreditOwedCents, totalBankCashCents, expenses, settings.monthlyIncomeCents]);
+
+  const aeroMessage = useMemo(() => {
+    switch (reactiveAeroState) {
+      case 'celebration':
+        return 'Finances thriving — on track for your savings goals!';
+      case 'caution':
+        return 'Discretionary spending is tight this month. Monitor upcoming expenses.';
+      case 'guidance':
+      default:
+        return 'All accounts, sinking funds, and manual investment totals reconciled.';
+    }
+  }, [reactiveAeroState]);
+
   // Category aggregates for Expense Skyline
   const categorySpendMap = useMemo(() => {
     const map = new Map<string, number>();
     const currentMonth = new Date().toISOString().substring(0, 7);
     expenses
-      .filter((e) => e.date.startsWith(currentMonth))
+      .filter((e) => e.date.startsWith(currentMonth) && (e.entryType || 'debit') === 'debit')
       .forEach((e) => {
         map.set(e.category, (map.get(e.category) || 0) + e.amountCents);
       });
@@ -745,44 +719,44 @@ export function FinanceScene({
   }, [categorySpendMap]);
 
   return (
-    <div className="relative h-[560px] w-full overflow-hidden rounded-2xl border border-charcoal-800 bg-[#0b0d10] shadow-2xl">
-      {/* 3D Command Deck Header & View Controls */}
+    <div className="relative h-[560px] w-full overflow-hidden rounded-2xl border border-[#1e222b] bg-[#0b0d10] shadow-2xl">
+      {/* 3D Command Deck Header & Controls */}
       <div className="absolute left-4 top-4 z-10 flex flex-col gap-2 max-w-[calc(100%-2rem)]">
-        <div className="rounded-xl border border-charcoal-800/90 bg-[#111419]/90 p-3.5 backdrop-blur-md shadow-2xl">
+        <div className="rounded-xl border border-[#1e222b] bg-[#111419]/90 p-3.5 backdrop-blur-md shadow-2xl">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-2">
-              <span className="flex h-2 w-2 rounded-full bg-gold-400 animate-pulse" />
-              <span className="text-xs font-bold uppercase tracking-wider text-gold-400">
+              <span className="flex h-2 w-2 rounded-full bg-gold animate-pulse" />
+              <span className="text-xs font-bold uppercase tracking-wider text-gold-light">
                 FundPilot 3D Command Deck
               </span>
             </div>
-            <span className="text-[10px] text-charcoal-400 font-mono">
-              Net Worth: ${(totalNetWorthCents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            <span className="text-[10px] text-[#9e9a93] font-mono">
+              Net Worth: {formatMoney(totalNetWorthCents, displayCurrency)}
             </span>
           </div>
 
           {/* 4-Bucket Summary Strip */}
-          <div className="mt-2.5 flex flex-wrap items-center gap-2 text-[11px] text-charcoal-300 border-t border-charcoal-800/80 pt-2">
+          <div className="mt-2.5 flex flex-wrap items-center gap-2 text-[11px] text-[#c8c4bc] border-t border-[#1e222b] pt-2">
             <span>
-              1. Cash: <strong className="text-gold-300">${(settings.bankCashCents / 100).toLocaleString('en-US', { minimumFractionDigits: 0 })}</strong>
+              1. Cash: <strong className="text-[#e5c07b]">{formatMoney(totalBankCashCents, displayCurrency)}</strong>
             </span>
-            <span className="text-charcoal-600">•</span>
+            <span className="text-[#3a3f4d]">•</span>
             <span>
-              2. Funds: <strong className="text-gold-400">${(totalFundsCents / 100).toLocaleString('en-US', { minimumFractionDigits: 0 })}</strong>
+              2. Funds: <strong className="text-gold-light">{formatMoney(totalFundsCents, displayCurrency)}</strong>
             </span>
-            <span className="text-charcoal-600">•</span>
+            <span className="text-[#3a3f4d]">•</span>
             <span>
-              3. Port: <strong className="text-gain-400">${(totalPortfolioCents / 100).toLocaleString('en-US', { minimumFractionDigits: 0 })}</strong>
+              3. Inv: <strong className="text-gain">{formatMoney(totalInvestmentsCents, displayCurrency)}</strong>
             </span>
-            <span className="text-charcoal-600">•</span>
+            <span className="text-[#3a3f4d]">•</span>
             <span>
-              4. Credit: <strong className="text-loss-400">-${(settings.creditCardOwedCents / 100).toLocaleString('en-US', { minimumFractionDigits: 0 })}</strong>
+              4. Credit: <strong className="text-loss">-{formatMoney(totalCreditOwedCents, displayCurrency)}</strong>
             </span>
           </div>
 
-          {/* Continuous View Transitions & Mascot Close-Up Selector */}
-          <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-charcoal-800/80 pt-2">
-            <span className="text-[10px] text-charcoal-400 uppercase font-semibold mr-1">Focus:</span>
+          {/* View Transitions */}
+          <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-[#1e222b] pt-2">
+            <span className="text-[10px] text-[#9e9a93] uppercase font-semibold mr-1">Focus:</span>
             <button
               onClick={() => {
                 setFocusMode('overview');
@@ -790,8 +764,8 @@ export function FinanceScene({
               }}
               className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-medium transition-all ${
                 focusMode === 'overview'
-                  ? 'bg-gold-400/20 text-gold-300 border border-gold-400/40 shadow-sm'
-                  : 'text-charcoal-400 hover:text-charcoal-200 hover:bg-charcoal-800/50 border border-transparent'
+                  ? 'bg-gold/20 text-gold-light border border-gold/40 shadow-sm'
+                  : 'text-[#9e9a93] hover:text-[#f5f3ef] hover:bg-[#1e222b] border border-transparent'
               }`}
             >
               <PieChart className="h-3 w-3" />
@@ -804,8 +778,8 @@ export function FinanceScene({
               }}
               className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-medium transition-all ${
                 focusMode === 'expenses'
-                  ? 'bg-gold-400/20 text-gold-300 border border-gold-400/40 shadow-sm'
-                  : 'text-charcoal-400 hover:text-charcoal-200 hover:bg-charcoal-800/50 border border-transparent'
+                  ? 'bg-gold/20 text-gold-light border border-gold/40 shadow-sm'
+                  : 'text-[#9e9a93] hover:text-[#f5f3ef] hover:bg-[#1e222b] border border-transparent'
               }`}
             >
               <Wallet className="h-3 w-3" />
@@ -818,8 +792,8 @@ export function FinanceScene({
               }}
               className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-medium transition-all ${
                 focusMode === 'funds'
-                  ? 'bg-gold-400/20 text-gold-300 border border-gold-400/40 shadow-sm'
-                  : 'text-charcoal-400 hover:text-charcoal-200 hover:bg-charcoal-800/50 border border-transparent'
+                  ? 'bg-gold/20 text-gold-light border border-gold/40 shadow-sm'
+                  : 'text-[#9e9a93] hover:text-[#f5f3ef] hover:bg-[#1e222b] border border-transparent'
               }`}
             >
               <PiggyBank className="h-3 w-3" />
@@ -827,27 +801,27 @@ export function FinanceScene({
             </button>
             <button
               onClick={() => {
-                setFocusMode('portfolio');
-                setSelectedInfo('Focusing East Quadrant: 3D Treemap Blocks (Height = |P&L %|)');
+                setFocusMode('investments');
+                setSelectedInfo('Focusing East Quadrant: Manual Investment Totals (Gold Tones Only)');
               }}
               className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-medium transition-all ${
-                focusMode === 'portfolio'
-                  ? 'bg-gain-500/20 text-gain-300 border border-gain-500/40 shadow-sm'
-                  : 'text-charcoal-400 hover:text-charcoal-200 hover:bg-charcoal-800/50 border border-transparent'
+                focusMode === 'investments'
+                  ? 'bg-gold/20 text-gold-light border border-gold/40 shadow-sm'
+                  : 'text-[#9e9a93] hover:text-[#f5f3ef] hover:bg-[#1e222b] border border-transparent'
               }`}
             >
               <TrendingUp className="h-3 w-3" />
-              Portfolio Treemap
+              Investments ({investments.length})
             </button>
             <button
               onClick={() => {
                 setFocusMode('mascot-close');
-                setSelectedInfo('Companion Mode: Aero the Wealth Navigator Drone (Faceted Titanium & Gold Astrolabe)');
+                setSelectedInfo(`Companion Aero: ${aeroMessage}`);
               }}
               className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-medium transition-all ${
                 focusMode === 'mascot-close'
-                  ? 'bg-gold-400 text-charcoal-950 font-bold border border-gold-300 shadow-sm'
-                  : 'text-gold-400 hover:text-gold-200 hover:bg-charcoal-800/50 border border-gold-400/20'
+                  ? 'bg-gold text-[#0b0d10] font-bold border border-gold-light shadow-sm'
+                  : 'text-gold-light hover:text-gold hover:bg-[#1e222b] border border-gold/20'
               }`}
             >
               <Bot className="h-3 w-3" />
@@ -859,8 +833,8 @@ export function FinanceScene({
 
       {/* Selected Element Interactive HUD Banner */}
       {selectedInfo && (
-        <div className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 flex items-center gap-2 rounded-full border border-gold-400/40 bg-[#111419]/95 px-4 py-2 text-xs font-medium text-gold-300 shadow-2xl backdrop-blur-md">
-          <Sparkles className="h-3.5 w-3.5 text-gold-400 animate-spin" />
+        <div className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 flex items-center gap-2 rounded-full border border-gold/40 bg-[#111419]/95 px-4 py-2 text-xs font-medium text-gold-light shadow-2xl backdrop-blur-md">
+          <Sparkles className="h-3.5 w-3.5 text-gold animate-spin" />
           <span>{selectedInfo}</span>
         </div>
       )}
@@ -870,30 +844,36 @@ export function FinanceScene({
         camera={{ position: [0, 5.8, 9.2], fov: 45 }}
         gl={{ antialias: true, alpha: false }}
         onPointerMissed={() => setSelectedInfo(null)}
+        onCreated={({ gl }) => {
+          gl.domElement.addEventListener('webglcontextlost', () => {
+            if (onWebGLFailed) onWebGLFailed();
+          });
+        }}
       >
         <color attach="background" args={['#0b0d10']} />
         <fog attach="fog" args={['#0b0d10', 10, 24]} />
-        <ambientLight intensity={0.8} />
+        <ambientLight intensity={0.9} />
         {/* Warm Champagne Directional & Fill Lighting */}
-        <pointLight position={[10, 12, 10]} intensity={1.4} color="#fbf8f0" />
-        <pointLight position={[-10, 6, -10]} intensity={0.7} color="#d4af37" />
-        <pointLight position={[0, -4, 4]} intensity={0.4} color="#a88220" />
+        <pointLight position={[10, 12, 10]} intensity={1.5} color="#fbf8f0" />
+        <pointLight position={[-10, 6, -10]} intensity={0.8} color="#d4af37" />
+        <pointLight position={[0, -4, 4]} intensity={0.5} color="#a88220" />
 
         {/* Ambient Warm Floating Dust */}
-        <AmbientWarmDust count={280} reducedMotion={isReducedMotion} />
+        <AmbientWarmDust count={240} reducedMotion={isReducedMotion} />
 
-        {/* 1. ORIGINAL 3D AVATAR MASCOT: "AERO" */}
-        <AeroMascotCompanion
-          focusMode={focusMode}
-          reducedMotion={isReducedMotion}
-          totalNetWorthCents={totalNetWorthCents}
-          safeToSpendMonthCents={safeToSpendMonthCents}
-        />
+        {/* 1. ORIGINAL 3D AVATAR MASCOT: "AERO" (RENDERED ONLY IN 'mascot-close' VIEW) */}
+        {focusMode === 'mascot-close' && (
+          <AeroMascotCompanion
+            reducedMotion={isReducedMotion}
+            reactiveState={reactiveAeroState}
+          />
+        )}
 
-        {/* 2. Quantum Net Worth Core */}
+        {/* 2. Net Worth Core */}
         {focusMode !== 'mascot-close' && (
           <NetWorthCore
             totalNetWorthCents={totalNetWorthCents}
+            displayCurrency={displayCurrency}
             reducedMotion={isReducedMotion}
             isDimmed={focusMode !== 'overview'}
           />
@@ -913,14 +893,14 @@ export function FinanceScene({
                 radius={radius}
                 progressRatio={ratio}
                 name={fund.name}
-                savedDollars={fund.currentAmountCents / 100}
-                targetDollars={fund.targetAmountCents / 100}
+                savedCents={fund.currentAmountCents}
+                targetCents={fund.targetAmountCents}
                 currency={fund.currency}
                 reducedMotion={isReducedMotion}
                 isDimmed={focusMode !== 'overview' && focusMode !== 'funds'}
                 onClick={() => {
                   setSelectedInfo(
-                    `Fund: ${fund.name} — $${(fund.currentAmountCents / 100).toFixed(0)} of $${(fund.targetAmountCents / 100).toFixed(0)} (${(ratio * 100).toFixed(0)}%)`
+                    `Fund: ${fund.name} — ${formatMoney(fund.currentAmountCents, fund.currency)} of ${formatMoney(fund.targetAmountCents, fund.currency)} (${(ratio * 100).toFixed(0)}%)`
                   );
                   onSelectFund(fund.id);
                 }}
@@ -940,10 +920,11 @@ export function FinanceScene({
                 category={cat}
                 spentCents={cents}
                 maxSpentCents={maxCategorySpend}
+                currency={displayCurrency}
                 isDimmed={focusMode !== 'overview' && focusMode !== 'expenses'}
                 onClick={() => {
                   setSelectedInfo(
-                    `Category: ${cat} — $${(cents / 100).toFixed(2)} spent this month`
+                    `Category: ${cat} — ${formatMoney(cents, displayCurrency)} spent this month`
                   );
                   onSelectCategory(cat);
                 }}
@@ -951,13 +932,11 @@ export function FinanceScene({
             );
           })}
 
-        {/* 5. Portfolio Treemap Blocks (East Quadrant) */}
+        {/* 5. Manual Investments 3D Blocks (East Quadrant) */}
         {focusMode !== 'mascot-close' &&
-          holdings.map((h, idx) => {
-            const quote = quotes[h.ticker]?.price || 0;
-            const mktVal = h.shares * quote;
-            const costVal = h.totalCostCents / 100;
-            const gainLossPct = costVal > 0 ? ((mktVal - costVal) / costVal) * 100 : 0;
+          investments.map((inv, idx) => {
+            const conv = convertCurrency(inv.amountCents, inv.currency, displayCurrency, rates);
+            const amountDollars = (conv ? conv.convertedAmount : inv.amountCents) / 100;
 
             const row = Math.floor(idx / 3);
             const col = idx % 3;
@@ -965,25 +944,27 @@ export function FinanceScene({
             const zPos = -1.2 + row * 0.85;
 
             return (
-              <PortfolioBlock
-                key={h.id}
+              <InvestmentBlock
+                key={inv.id}
                 position={[xPos, 0, zPos]}
-                ticker={h.ticker}
-                marketValueDollars={mktVal}
-                gainLossPct={gainLossPct}
-                isDimmed={focusMode !== 'overview' && focusMode !== 'portfolio'}
+                label={inv.label || inv.type}
+                type={inv.type}
+                amountDollars={amountDollars}
+                lastUpdated={inv.lastUpdated}
+                currency={displayCurrency}
+                isDimmed={focusMode !== 'overview' && focusMode !== 'investments'}
                 onClick={() => {
                   setSelectedInfo(
-                    `Holding: ${h.ticker} — Value: $${mktVal.toFixed(2)} (${gainLossPct >= 0 ? '+' : ''}${gainLossPct.toFixed(1)}% P&L)`
+                    `Investment: ${inv.label || inv.type} — ${formatMoney(inv.amountCents, inv.currency)} (Updated: ${inv.lastUpdated})`
                   );
-                  onSelectHolding(h.ticker);
+                  onSelectInvestment(inv.id);
                 }}
               />
             );
           })}
 
         {/* Coordinate Ground Grid (Warm Charcoal) */}
-        <gridHelper args={[26, 26, '#2c323f', '#14171d']} position={[0, -0.01, 0]} />
+        <gridHelper args={[26, 26, '#262930', '#111419']} position={[0, -0.01, 0]} />
 
         {/* Camera Lerp Controller */}
         <CameraController focusMode={focusMode} reducedMotion={isReducedMotion} />

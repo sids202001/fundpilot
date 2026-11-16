@@ -1,98 +1,182 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   Expense,
-  CategoryRule,
-  CategoryBudget,
+  Account,
+  InvestmentEntry,
   Fund,
   FundAllocation,
   FundAutoRule,
-  Holding,
-  TaxLot,
-  CorporateAction,
+  CustomCategory,
+  CategoryRule,
+  CategoryBudget,
+  BillReminder,
   UserSettings,
-  QuoteData,
-  FxRateData,
+  FxRatesMap,
   VaultRecord,
+  SyncTombstone,
+  SyncReport,
 } from './types';
 import {
   generateSalt,
   deriveKeyFromPin,
   createVaultVerifier,
   verifyPinAndDeriveKey,
+  wrapVaultKeyWithRecoveryWords,
+  unwrapVaultKeyWithRecoveryWords,
   encryptObject,
   decryptObject,
+  bufferToBase64,
+  getOrCreateDeviceId,
 } from './crypto';
 import { db, getVaultMeta, saveVaultMeta, wipeAllData } from './db';
 import { detectSubscriptions } from './subscriptionDetector';
+import { convertCurrency, formatMoney, getCurrencyDecimals } from './currencies';
+
+// Helper: Get local YYYY-MM-DD date string (Fix 15)
+export function getLocalDate(date: Date = new Date()): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+// Helper: Get local YYYY-MM string
+export function getLocalMonth(date: Date = new Date()): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  return `${y}-${m}`;
+}
+
+// Helper: Format local display date e.g. "Nov 15, 2026"
+export function formatDisplayDate(dateStr: string): string {
+  if (!dateStr) return '';
+  const parts = dateStr.split('-');
+  if (parts.length === 3) {
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10) - 1;
+    const d = parseInt(parts[2], 10);
+    const dObj = new Date(y, m, d);
+    if (!isNaN(dObj.getTime())) {
+      return dObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+  }
+  return dateStr;
+}
 
 interface StoreContextType {
   // Vault & Security
   isVaultReady: boolean;
   isSetup: boolean;
   isLocked: boolean;
-  setupPin: (pin: string) => Promise<boolean>;
+  setupPin: (pin: string, recoveryWords: string[]) => Promise<boolean>;
   unlockVault: (pin: string) => Promise<boolean>;
+  recoverVaultWithKey: (recoveryWords: string[], newPin: string) => Promise<boolean>;
+  changePin: (oldPin: string, newPin: string) => Promise<boolean>;
+  rotateRecoveryKey: (newRecoveryWords: string[]) => Promise<boolean>;
   lockVault: () => void;
   autoLockMinutes: number;
 
-  // Data collections
+  // Data Collections
   expenses: Expense[];
-  categoryRules: CategoryRule[];
-  budgets: CategoryBudget[];
+  accounts: Account[];
+  investments: InvestmentEntry[];
   funds: Fund[];
   fundAllocations: FundAllocation[];
   fundAutoRules: FundAutoRule[];
-  holdings: Holding[];
-  corporateActions: CorporateAction[];
+  customCategories: CustomCategory[];
+  categoryRules: CategoryRule[];
+  budgets: CategoryBudget[];
+  bills: BillReminder[];
   settings: UserSettings;
 
-  // Quotes & FX
-  quotes: Record<string, QuoteData>;
-  fxRate: FxRateData | null;
-  refreshQuotes: (force?: boolean) => Promise<void>;
+  // FX & Offline
+  fxRatesMap: FxRatesMap | null;
+  rates: Record<string, number>;
+  fxRate: { rate: number; asOfDate: string } | null;
+  refreshFx: () => Promise<void>;
   isOffline: boolean;
 
-  // Actions
-  addExpense: (expense: Omit<Expense, 'id' | 'createdAt'>) => Promise<void>;
+  // Expense Actions
+  addExpense: (expense: Omit<Expense, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+  updateExpense: (id: string, data: Partial<Expense>) => Promise<void>;
+  deleteExpense: (id: string) => Promise<void>;
   addCategoryRule: (merchantPattern: string, category: string) => Promise<void>;
-  setCategoryBudget: (category: string, monthlyLimitCents: number) => Promise<void>;
-  
-  createFund: (name: string, targetAmountCents: number, targetDate: string, currency: 'USD' | 'INR') => Promise<void>;
-  allocateFund: (fundId: string, amountCents: number, type: 'deposit' | 'withdraw', note?: string) => Promise<void>;
-  createFundAutoRule: (fundId: string, amountCents: number, dayOfMonth: number) => Promise<void>;
+  deleteCategoryRule: (id: string) => Promise<void>;
+  setCategoryBudget: (category: string, monthlyLimitCents: number, currency?: string) => Promise<void>;
+  deleteCategoryBudget: (category: string) => Promise<void>;
 
-  addHolding: (holding: { ticker: string; assetType: 'equity' | 'crypto'; shares: number; costPerShareCents: number; date?: string; notes?: string }) => Promise<void>;
-  applyCorporateSplit: (ticker: string, splitRatio: number) => Promise<void>;
-  recordDividend: (ticker: string, totalAmountCents: number, date: string) => Promise<void>;
+  // Account Actions
+  addAccount: (name: string, type: Account['type'], balanceCents: number, currency: string) => Promise<void>;
+  updateAccount: (id: string, data: Partial<Account>) => Promise<void>;
+  deleteAccount: (id: string) => Promise<void>;
 
+  // Investment Actions (Fix 0: Manual Totals Only)
+  addInvestment: (label: string, type: InvestmentEntry['type'], amountCents: number, currency: string) => Promise<void>;
+  updateInvestment: (id: string, data: { label?: string; type?: InvestmentEntry['type']; amountCents?: number; currency?: string }) => Promise<void>;
+  deleteInvestment: (id: string) => Promise<void>;
+
+  // Fund Actions (Fix 18: Transfers Move Money)
+  createFund: (name: string, targetAmountCents: number, targetDate: string, currency: string) => Promise<void>;
+  updateFund: (id: string, data: Partial<Fund>) => Promise<void>;
+  deleteFund: (id: string) => Promise<void>;
+  allocateFund: (fundId: string, amountCents: number, type: 'deposit' | 'withdraw', sourceAccountId?: string, note?: string) => Promise<{ success: boolean; error?: string }>;
+  deleteFundAllocation: (id: string) => Promise<void>;
+  createFundAutoRule: (fundId: string, amountCents: number, dayOfMonth: number, sourceAccountId?: string) => Promise<void>;
+  toggleFundAutoRule: (id: string, active: boolean) => Promise<void>;
+  deleteFundAutoRule: (id: string) => Promise<void>;
+
+  // Custom Category Actions (Fix 20)
+  addCustomCategory: (name: string) => Promise<void>;
+  renameCustomCategory: (id: string, newName: string) => Promise<void>;
+  deleteCustomCategory: (id: string) => Promise<{ reclassifiedCount: number }>;
+
+  // Bill Actions (Fix 22)
+  addBill: (name: string, amountCents: number, currency: string, dueDay: number) => Promise<void>;
+  updateBill: (id: string, data: Partial<BillReminder>) => Promise<void>;
+  toggleBillActive: (id: string, active: boolean) => Promise<void>;
+  markBillPaid: (id: string, monthStr?: string) => Promise<void>;
+  deleteBill: (id: string) => Promise<void>;
+
+  // Settings Actions
   updateSettings: (newSettings: Partial<UserSettings>) => Promise<void>;
 
-  // Backup & Restore
+  // Cross-Device Sync (Fix 25)
+  exportSyncBundle: () => Promise<string>;
+  importSyncBundle: (bundleJson: string) => Promise<{ success: boolean; report?: SyncReport; error?: string }>;
+
+  // Backup & CSV
   exportEncryptedBackup: () => Promise<string>;
   importEncryptedBackup: (jsonContent: string) => Promise<boolean>;
-  exportCSVData: () => { expensesCSV: string; fundsCSV: string; holdingsCSV: string };
+  exportCSVData: () => { expensesCSV: string; fundsCSV: string; investmentsCSV: string; accountsCSV: string };
   wipeEverything: () => Promise<void>;
 
-  // Financial aggregates
+  // Financial Aggregates (Converted to displayCurrency)
+  displayCurrency: string;
   totalNetWorthCents: number;
+  totalBankCashCents: number;
   totalFundsCents: number;
-  totalPortfolioCents: number;
-  creditCardOwedCents: number;
+  totalInvestmentsCents: number;
+  totalCreditOwedCents: number;
   safeToSpendMonthCents: number;
+  monthlyDebitSpentCents: number;
+  monthlyCreditInflowCents: number;
+  migratedHoldingsCount: number;
 }
 
 const DEFAULT_SETTINGS: UserSettings = {
-  bankCashCents: 0,
-  creditCardOwedCents: 0,
-  monthlyIncomeCents: 0,
-  fixedBillsCents: 0,
   autoLockMinutes: 5,
+  displayCurrency: 'USD',
   useReducedMotion: false,
   prefer2D: false,
-  biometricsEnabled: false,
-  cloudLlmOptIn: false,
+  monthlyIncomeCents: 0,
+  fixedBillsCents: 0,
+  incomeCurrency: 'USD',
+  fixedBillsCurrency: 'USD',
+  bankCashCents: 0,
+  creditCardOwedCents: 0,
+  updatedAt: Date.now(),
 };
 
 const StoreContext = createContext<StoreContextType | null>(null);
@@ -103,28 +187,29 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [isLocked, setIsLocked] = useState(true);
   const [cryptoKey, setCryptoKey] = useState<CryptoKey | null>(null);
 
-  // Financial data state
+  // Collections state
   const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [categoryRules, setCategoryRules] = useState<CategoryRule[]>([]);
-  const [budgets, setBudgets] = useState<CategoryBudget[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [investments, setInvestments] = useState<InvestmentEntry[]>([]);
   const [funds, setFunds] = useState<Fund[]>([]);
   const [fundAllocations, setFundAllocations] = useState<FundAllocation[]>([]);
   const [fundAutoRules, setFundAutoRules] = useState<FundAutoRule[]>([]);
-  const [holdings, setHoldings] = useState<Holding[]>([]);
-  const [corporateActions, setCorporateActions] = useState<CorporateAction[]>([]);
+  const [customCategories, setCustomCategories] = useState<CustomCategory[]>([]);
+  const [categoryRules, setCategoryRules] = useState<CategoryRule[]>([]);
+  const [budgets, setBudgets] = useState<CategoryBudget[]>([]);
+  const [bills, setBills] = useState<BillReminder[]>([]);
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
 
-  // Quotes and FX
-  const [quotes, setQuotes] = useState<Record<string, QuoteData>>({});
-  const [fxRate, setFxRate] = useState<FxRateData | null>(null);
+  // FX & Offline
+  const [fxRatesMap, setFxRatesMap] = useState<FxRatesMap | null>(null);
   const [isOffline, setIsOffline] = useState(false);
+  const [migratedHoldingsCount, setMigratedHoldingsCount] = useState(0);
 
-  const lastQuotesFetchRef = useRef<number>(0);
   const idleTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Initialize vault check
+  // Check vault status on mount
   useEffect(() => {
-    async function checkVault() {
+    async function initVaultCheck() {
       try {
         const meta = await getVaultMeta();
         if (meta && meta.salt && meta.verifier) {
@@ -134,15 +219,20 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           setIsSetup(false);
           setIsLocked(true);
         }
+
+        // Load cached FX rates from Dexie
+        const cachedFx = await db.fxCache.get('USD');
+        if (cachedFx) {
+          setFxRatesMap(cachedFx);
+        }
       } catch (err) {
         console.error('Failed to initialize database:', err);
       } finally {
         setIsVaultReady(true);
       }
     }
-    checkVault();
+    initVaultCheck();
 
-    // Online / Offline listeners
     const handleOnline = () => setIsOffline(false);
     const handleOffline = () => setIsOffline(true);
     window.addEventListener('online', handleOnline);
@@ -167,33 +257,33 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (isLocked) return;
-
     const events = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll'];
     const handler = () => resetIdleTimer();
-
     events.forEach((evt) => window.addEventListener(evt, handler));
     resetIdleTimer();
-
     return () => {
       events.forEach((evt) => window.removeEventListener(evt, handler));
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
     };
   }, [isLocked, resetIdleTimer]);
 
-  // Lock vault
+  // Lock Vault
   const lockVault = useCallback(() => {
     setCryptoKey(null);
     setIsLocked(true);
-    // Clear sensitive state from memory
     setExpenses([]);
+    setAccounts([]);
+    setInvestments([]);
     setFunds([]);
     setFundAllocations([]);
-    setHoldings([]);
-    setCorporateActions([]);
+    setFundAutoRules([]);
+    setCustomCategories([]);
+    setCategoryRules([]);
     setBudgets([]);
+    setBills([]);
   }, []);
 
-  // Encrypted persistence helper
+  // Helper to persist encrypted record
   const persistRecord = async <T,>(type: VaultRecord['type'], id: string, data: T, key: CryptoKey) => {
     const { ciphertext, iv } = await encryptObject(data, key);
     await db.records.put({
@@ -201,135 +291,281 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       type,
       iv,
       ciphertext,
-      updatedAt: Date.now(),
+      updatedAt: (data as any)?.updatedAt || Date.now(),
     });
   };
 
-  // Setup initial master PIN
-  const setupPin = async (pin: string): Promise<boolean> => {
+  // Helper to delete encrypted record and save tombstone
+  const deleteRecord = async (type: VaultRecord['type'], id: string) => {
+    await db.records.delete(id);
+    await db.tombstones.put({
+      id,
+      type,
+      deletedAt: Date.now(),
+    });
+  };
+
+  // Refresh FX from server proxy
+  const refreshFx = async () => {
+    try {
+      const res = await fetch('/api/fx');
+      if (res.ok) {
+        const json: FxRatesMap = await res.json();
+        if (json && json.rates) {
+          setFxRatesMap(json);
+          await db.fxCache.put(json);
+        }
+      }
+    } catch (err) {
+      // Offline fallback: load from Dexie cache
+      const cached = await db.fxCache.get('USD');
+      if (cached) setFxRatesMap(cached);
+    }
+  };
+
+  // Setup Initial PIN with 12-word Recovery Key (Fix 26)
+  const setupPin = async (pin: string, recoveryWords: string[]): Promise<boolean> => {
     try {
       const salt = generateSalt();
-      const key = await deriveKeyFromPin(pin, salt);
-      const { verifier, verifierIv } = await createVaultVerifier(key);
+      const masterKey = await deriveKeyFromPin(pin, salt);
+      const { verifier, verifierIv } = await createVaultVerifier(masterKey);
+
+      // Wrap master key with 12 recovery words
+      const { wrappedKey, wrappedIv } = await wrapVaultKeyWithRecoveryWords(masterKey, recoveryWords);
 
       await saveVaultMeta({
         salt,
         verifier,
         verifierIv,
+        recoveryWrappedKey: wrappedKey,
+        recoveryWrappedIv: wrappedIv,
         updatedAt: Date.now(),
       });
 
-      // Persist default settings
-      const { ciphertext, iv } = await encryptObject(DEFAULT_SETTINGS, key);
-      await db.records.put({
-        id: 'user_settings',
-        type: 'settings',
-        iv,
-        ciphertext,
+      // Default settings
+      const initialSettings: UserSettings = {
+        ...DEFAULT_SETTINGS,
         updatedAt: Date.now(),
-      });
+        deviceId: getOrCreateDeviceId(),
+      };
+      await persistRecord('settings', 'user_settings', initialSettings, masterKey);
 
-      setCryptoKey(key);
+      // Default Accounts (Fix 4: Bank and Credit snapshots)
+      const primaryBank: Account = {
+        id: 'acc-primary-bank',
+        name: 'Primary Checking',
+        type: 'bank',
+        balanceCents: 0,
+        currency: 'USD',
+        lastEditedDate: getLocalDate(),
+        updatedAt: Date.now(),
+        deviceId: getOrCreateDeviceId(),
+      };
+      const primaryCredit: Account = {
+        id: 'acc-primary-credit',
+        name: 'Primary Credit Card',
+        type: 'credit',
+        balanceCents: 0,
+        currency: 'USD',
+        lastEditedDate: getLocalDate(),
+        updatedAt: Date.now(),
+        deviceId: getOrCreateDeviceId(),
+      };
+      await persistRecord('account', primaryBank.id, primaryBank, masterKey);
+      await persistRecord('account', primaryCredit.id, primaryCredit, masterKey);
+
+      setCryptoKey(masterKey);
+      setSettings(initialSettings);
+      setAccounts([primaryBank, primaryCredit]);
       setIsSetup(true);
       setIsLocked(false);
-      setSettings(DEFAULT_SETTINGS);
+
+      refreshFx();
       return true;
     } catch (err) {
-      console.error('Error setting up PIN:', err);
+      console.error('Failed to setup PIN and vault:', err);
       return false;
     }
   };
 
-  // Run sinking fund auto-rules catch-up
-  const runFundAutoRulesCatchup = async (currentFunds: Fund[], currentRules: FundAutoRule[], key: CryptoKey) => {
+  // True Catch-Up for Fund Auto-Rules (Fix 14)
+  const runFundAutoRulesCatchup = async (
+    currentFunds: Fund[],
+    currentRules: FundAutoRule[],
+    currentAccounts: Account[],
+    key: CryptoKey
+  ) => {
     const today = new Date();
     const currentDay = today.getDate();
-    const currentMonthKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+    const currentYear = today.getFullYear();
+    const currentMonthNum = today.getMonth() + 1; // 1 - 12
+
     let updatedFunds = [...currentFunds];
     let updatedRules = [...currentRules];
+    let updatedAccounts = [...currentAccounts];
     let hasChanges = false;
+    let missedMonthsTotal = 0;
 
-    for (let i = 0; i < updatedRules.length; i++) {
-      const rule = updatedRules[i];
+    for (let rIdx = 0; rIdx < updatedRules.length; rIdx++) {
+      const rule = updatedRules[rIdx];
       if (!rule.active) continue;
 
-      const lastMonthApplied = rule.lastAppliedDate ? rule.lastAppliedDate.substring(0, 7) : '';
-      if (currentDay >= rule.dayOfMonth && lastMonthApplied !== currentMonthKey) {
-        // Apply auto-transfer
-        const fundIdx = updatedFunds.findIndex((f) => f.id === rule.fundId);
-        if (fundIdx !== -1) {
-          const allocId = `auto-alloc-${Date.now()}-${rule.id}`;
-          const newAlloc: FundAllocation = {
-            id: allocId,
-            fundId: rule.fundId,
-            amountCents: rule.amountCents,
-            type: 'deposit',
-            date: today.toISOString().split('T')[0],
-            note: `Auto-rule: Monthly transfer on day ${rule.dayOfMonth}`,
-            createdAt: Date.now(),
-          };
+      const fund = updatedFunds.find((f) => f.id === rule.fundId);
+      if (!fund) continue;
 
-          updatedFunds[fundIdx] = {
-            ...updatedFunds[fundIdx],
-            currentAmountCents: updatedFunds[fundIdx].currentAmountCents + rule.amountCents,
-          };
+      // Determine starting month for catch-up
+      let startYear: number;
+      let startMonthNum: number;
 
-          updatedRules[i] = {
-            ...rule,
-            lastAppliedDate: today.toISOString().split('T')[0],
-          };
-
-          await persistRecord('fund_allocation', allocId, newAlloc, key);
-          await persistRecord('fund', updatedFunds[fundIdx].id, updatedFunds[fundIdx], key);
-          await persistRecord('fund_rule', rule.id, updatedRules[i], key);
-          hasChanges = true;
+      if (rule.lastAppliedDate) {
+        const parts = rule.lastAppliedDate.split('-');
+        startYear = parseInt(parts[0], 10);
+        startMonthNum = parseInt(parts[1], 10) + 1;
+        if (startMonthNum > 12) {
+          startYear += 1;
+          startMonthNum = 1;
         }
+      } else {
+        startYear = currentYear;
+        startMonthNum = currentMonthNum;
+      }
+
+      // Collect all missed months up to current
+      const missedMonths: Array<{ y: number; m: number }> = [];
+      let iterY = startYear;
+      let iterM = startMonthNum;
+
+      while (iterY < currentYear || (iterY === currentYear && iterM < currentMonthNum)) {
+        missedMonths.push({ y: iterY, m: iterM });
+        iterM++;
+        if (iterM > 12) {
+          iterY++;
+          iterM = 1;
+        }
+      }
+
+      // Check current month if dueDay has passed or is today
+      if (currentDay >= rule.dayOfMonth) {
+        const alreadyAppliedCurrent =
+          rule.lastAppliedDate && rule.lastAppliedDate.startsWith(getLocalMonth(today));
+        if (!alreadyAppliedCurrent) {
+          missedMonths.push({ y: currentYear, m: currentMonthNum });
+        }
+      }
+
+      if (missedMonths.length === 0) continue;
+
+      // Apply each missed month sequentially (Fix 14 & Fix 18)
+      for (const { y, m } of missedMonths) {
+        const monthStr = `${y}-${String(m).padStart(2, '0')}`;
+        const dayStr = String(Math.min(rule.dayOfMonth, 28)).padStart(2, '0');
+        const allocDate = `${monthStr}-${dayStr}`;
+
+        // Transfer rule (Fix 18): Deduct from source account if available
+        let sourceAcc = rule.sourceAccountId
+          ? updatedAccounts.find((a) => a.id === rule.sourceAccountId)
+          : updatedAccounts.find((a) => a.type === 'bank' || a.type === 'cash');
+
+        if (sourceAcc && sourceAcc.balanceCents < rule.amountCents) {
+          // Insufficient balance: SKIP allocation with record
+          console.warn(`Auto-rule skipped for month ${monthStr}: source account balance too low`);
+          continue;
+        }
+
+        if (sourceAcc) {
+          sourceAcc = {
+            ...sourceAcc,
+            balanceCents: sourceAcc.balanceCents - rule.amountCents,
+            lastEditedDate: getLocalDate(),
+            updatedAt: Date.now(),
+          };
+          updatedAccounts = updatedAccounts.map((a) => (a.id === sourceAcc!.id ? sourceAcc! : a));
+          await persistRecord('account', sourceAcc.id, sourceAcc, key);
+        }
+
+        // Add to fund
+        const fundIndex = updatedFunds.findIndex((f) => f.id === fund.id);
+        if (fundIndex !== -1) {
+          updatedFunds[fundIndex] = {
+            ...updatedFunds[fundIndex],
+            currentAmountCents: updatedFunds[fundIndex].currentAmountCents + rule.amountCents,
+            updatedAt: Date.now(),
+          };
+          await persistRecord('fund', fund.id, updatedFunds[fundIndex], key);
+        }
+
+        // Record allocation
+        const allocId = `auto-alloc-${Date.now()}-${rule.id}-${monthStr}`;
+        const newAlloc: FundAllocation = {
+          id: allocId,
+          fundId: rule.fundId,
+          sourceAccountId: sourceAcc?.id,
+          amountCents: rule.amountCents,
+          type: 'deposit',
+          date: allocDate,
+          note: `Auto-rule: Transfer for ${monthStr} on day ${rule.dayOfMonth}`,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          deviceId: getOrCreateDeviceId(),
+        };
+        await persistRecord('fund_allocation', allocId, newAlloc, key);
+
+        rule.lastAppliedDate = allocDate;
+        rule.updatedAt = Date.now();
+        await persistRecord('fund_rule', rule.id, rule, key);
+
+        missedMonthsTotal++;
+        hasChanges = true;
       }
     }
 
     if (hasChanges) {
       setFunds(updatedFunds);
       setFundAutoRules(updatedRules);
+      setAccounts(updatedAccounts);
     }
   };
 
-  // Unlock vault with PIN
+  // Unlock Vault with PIN
   const unlockVault = async (pin: string): Promise<boolean> => {
     try {
       const meta = await getVaultMeta();
       if (!meta) return false;
 
-      const key = await verifyPinAndDeriveKey(pin, meta.salt, meta.verifier, meta.verifierIv);
-      if (!key) {
-        return false;
-      }
+      const masterKey = await verifyPinAndDeriveKey(pin, meta.salt, meta.verifier, meta.verifierIv);
+      if (!masterKey) return false;
 
-      setCryptoKey(key);
+      setCryptoKey(masterKey);
 
-      // Decrypt all records from IndexedDB
+      // Decrypt all records
       const allRecords = await db.records.toArray();
       const loadedExpenses: Expense[] = [];
-      const loadedRules: CategoryRule[] = [];
-      const loadedBudgets: CategoryBudget[] = [];
+      const loadedAccounts: Account[] = [];
+      const loadedInvestments: InvestmentEntry[] = [];
       const loadedFunds: Fund[] = [];
       const loadedAllocations: FundAllocation[] = [];
       const loadedAutoRules: FundAutoRule[] = [];
-      const loadedHoldings: Holding[] = [];
-      const loadedCorpActions: CorporateAction[] = [];
+      const loadedCustomCats: CustomCategory[] = [];
+      const loadedRules: CategoryRule[] = [];
+      const loadedBudgets: CategoryBudget[] = [];
+      const loadedBills: BillReminder[] = [];
       let loadedSettings = DEFAULT_SETTINGS;
+
+      // Track legacy items to migrate
+      const legacyHoldings: any[] = [];
 
       for (const rec of allRecords) {
         try {
-          const decrypted = await decryptObject<any>(rec.ciphertext, rec.iv, key);
+          const decrypted = await decryptObject<any>(rec.ciphertext, rec.iv, masterKey);
           switch (rec.type) {
             case 'expense':
               loadedExpenses.push(decrypted);
               break;
-            case 'category_rule':
-              loadedRules.push(decrypted);
+            case 'account':
+              loadedAccounts.push(decrypted);
               break;
-            case 'budget':
-              loadedBudgets.push(decrypted);
+            case 'investment':
+              loadedInvestments.push(decrypted);
               break;
             case 'fund':
               loadedFunds.push(decrypted);
@@ -340,14 +576,23 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             case 'fund_rule':
               loadedAutoRules.push(decrypted);
               break;
-            case 'holding':
-              loadedHoldings.push(decrypted);
+            case 'custom_category':
+              loadedCustomCats.push(decrypted);
               break;
-            case 'corporate_action':
-              loadedCorpActions.push(decrypted);
+            case 'category_rule':
+              loadedRules.push(decrypted);
+              break;
+            case 'budget':
+              loadedBudgets.push(decrypted);
+              break;
+            case 'bill':
+              loadedBills.push(decrypted);
               break;
             case 'settings':
               loadedSettings = decrypted;
+              break;
+            case 'holding' as any:
+              legacyHoldings.push(decrypted);
               break;
           }
         } catch (decryptErr) {
@@ -355,7 +600,73 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // Mark recurring subscriptions
+      // ======================================================================
+      // MIGRATION 1: Legacy Holdings -> New Investment Entries (Fix 0)
+      // "every existing holding becomes one Investment entry: label = ticker,
+      // type = Stocks (Crypto for SOL/BTC), amount = totalCostCents, lastUpdated = migration date.
+      // Holding count before migration must equal entry count after — nothing silently dropped."
+      // ======================================================================
+      let migratedCount = 0;
+      if (legacyHoldings.length > 0) {
+        for (const h of legacyHoldings) {
+          const ticker = (h.ticker || 'UNKNOWN').toUpperCase().trim();
+          const isCrypto = ticker === 'SOL' || ticker === 'BTC';
+          const invId = `inv-migrated-${h.id || Date.now()}`;
+          const newEntry: InvestmentEntry = {
+            id: invId,
+            label: ticker,
+            type: isCrypto ? 'Crypto' : 'Stocks',
+            amountCents: h.totalCostCents || 0,
+            currency: 'USD',
+            lastUpdated: getLocalDate(),
+            updatedAt: Date.now(),
+            deviceId: getOrCreateDeviceId(),
+          };
+          loadedInvestments.push(newEntry);
+          await persistRecord('investment', invId, newEntry, masterKey);
+          await db.records.delete(h.id); // Remove legacy holding record
+          migratedCount++;
+        }
+        setMigratedHoldingsCount(migratedCount);
+      }
+
+      // ======================================================================
+      // MIGRATION 2: Legacy Settings Cash/Credit -> Real Accounts (Fix 4)
+      // "the current single cash/credit settings numbers become one default Bank
+      // account and one default Credit Card account with the same balances —
+      // no user's numbers may change in migration."
+      // ======================================================================
+      if (loadedAccounts.length === 0) {
+        const bankCash = loadedSettings.bankCashCents || 0;
+        const creditOwed = loadedSettings.creditCardOwedCents || 0;
+
+        const defaultBank: Account = {
+          id: 'acc-primary-bank',
+          name: 'Primary Checking',
+          type: 'bank',
+          balanceCents: bankCash,
+          currency: 'USD',
+          lastEditedDate: getLocalDate(),
+          updatedAt: Date.now(),
+          deviceId: getOrCreateDeviceId(),
+        };
+        const defaultCredit: Account = {
+          id: 'acc-primary-credit',
+          name: 'Primary Credit Card',
+          type: 'credit',
+          balanceCents: creditOwed,
+          currency: 'USD',
+          lastEditedDate: getLocalDate(),
+          updatedAt: Date.now(),
+          deviceId: getOrCreateDeviceId(),
+        };
+
+        loadedAccounts.push(defaultBank, defaultCredit);
+        await persistRecord('account', defaultBank.id, defaultBank, masterKey);
+        await persistRecord('account', defaultCredit.id, defaultCredit, masterKey);
+      }
+
+      // Mark recurring subscriptions (Strict Fix 2)
       const subs = detectSubscriptions(loadedExpenses);
       const enhancedExpenses = loadedExpenses.map((exp) => ({
         ...exp,
@@ -363,26 +674,23 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       }));
 
       setExpenses(enhancedExpenses);
-      setCategoryRules(loadedRules);
-      setBudgets(loadedBudgets);
+      setAccounts(loadedAccounts);
+      setInvestments(loadedInvestments);
       setFunds(loadedFunds);
       setFundAllocations(loadedAllocations);
       setFundAutoRules(loadedAutoRules);
-      setHoldings(loadedHoldings);
-      setCorporateActions(loadedCorpActions);
+      setCustomCategories(loadedCustomCats);
+      setCategoryRules(loadedRules);
+      setBudgets(loadedBudgets);
+      setBills(loadedBills);
       setSettings(loadedSettings);
 
       setIsLocked(false);
 
-      // Run auto-rules catchup on launch
-      await runFundAutoRulesCatchup(loadedFunds, loadedAutoRules, key);
+      // Run auto-rules true catch-up
+      await runFundAutoRulesCatchup(loadedFunds, loadedAutoRules, loadedAccounts, masterKey);
 
-      // Refresh quotes and FX
-      setTimeout(() => {
-        refreshQuotes();
-        refreshFx();
-      }, 100);
-
+      refreshFx();
       return true;
     } catch (err) {
       console.error('Error unlocking vault:', err);
@@ -390,71 +698,152 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Quotes fetcher
-  const refreshQuotes = async (force: boolean = false) => {
-    const now = Date.now();
-    // At most once every 15 minutes unless forced
-    if (!force && now - lastQuotesFetchRef.current < 15 * 60 * 1000 && Object.keys(quotes).length > 0) {
-      return;
-    }
-
-    // Identify tickers from holdings or default portfolio
-    const tickerSet = new Set<string>();
-    holdings.forEach((h) => tickerSet.add(h.ticker.toUpperCase()));
-    ['NVDA', 'MSFT', 'AMD', 'SNDK', 'MU', 'AVGO', 'GOOGL', 'ORCL', 'QCOM', 'CRM', 'NOW', 'NFLX', 'META', 'INTC', 'TEM', 'SOFI', 'XYZ', 'SOL', 'BTC'].forEach((t) => tickerSet.add(t));
-
-    const tickerList = Array.from(tickerSet).join(',');
+  // Recover Vault with 12-word Recovery Key (Fix 26)
+  const recoverVaultWithKey = async (recoveryWords: string[], newPin: string): Promise<boolean> => {
     try {
-      const res = await fetch(`/api/quotes?tickers=${encodeURIComponent(tickerList)}`);
-      if (res.ok) {
-        const json = await res.json();
-        if (json.quotes) {
-          setQuotes(json.quotes);
-          lastQuotesFetchRef.current = now;
+      const meta = await getVaultMeta();
+      if (!meta || !meta.recoveryWrappedKey || !meta.recoveryWrappedIv) return false;
 
-          // Cache to Dexie for offline use
-          for (const [sym, q] of Object.entries(json.quotes as Record<string, QuoteData>)) {
-            await db.quotesCache.put(q);
-          }
-          return;
-        }
+      // Unwrap existing master CryptoKey
+      const unwrappedKey = await unwrapVaultKeyWithRecoveryWords(
+        meta.recoveryWrappedKey,
+        meta.recoveryWrappedIv,
+        recoveryWords
+      );
+      if (!unwrappedKey) return false;
+
+      // Decrypt all existing records with unwrapped master key
+      const records = await db.records.toArray();
+      const decryptedRecords: Array<{ id: string; type: VaultRecord['type']; data: any }> = [];
+
+      for (const rec of records) {
+        const decrypted = await decryptObject<any>(rec.ciphertext, rec.iv, unwrappedKey);
+        decryptedRecords.push({ id: rec.id, type: rec.type, data: decrypted });
       }
+
+      // Derive new master CryptoKey from new PIN
+      const newSalt = generateSalt();
+      const newMasterKey = await deriveKeyFromPin(newPin, newSalt);
+      const { verifier, verifierIv } = await createVaultVerifier(newMasterKey);
+
+      // Re-wrap new master key with the same recovery words
+      const { wrappedKey, wrappedIv } = await wrapVaultKeyWithRecoveryWords(newMasterKey, recoveryWords);
+
+      // Save new vault meta
+      await saveVaultMeta({
+        salt: newSalt,
+        verifier,
+        verifierIv,
+        recoveryWrappedKey: wrappedKey,
+        recoveryWrappedIv: wrappedIv,
+        updatedAt: Date.now(),
+      });
+
+      // Re-encrypt every record under the new master key
+      for (const item of decryptedRecords) {
+        await persistRecord(item.type, item.id, item.data, newMasterKey);
+      }
+
+      setCryptoKey(newMasterKey);
+      setIsLocked(false);
+      return true;
     } catch (err) {
-      // Offline fallback: load from cached quotes
-      const cached = await db.quotesCache.toArray();
-      if (cached.length > 0) {
-        const map: Record<string, QuoteData> = {};
-        cached.forEach((q) => {
-          map[q.ticker] = { ...q, isStale: true };
-        });
-        setQuotes(map);
-      }
+      console.error('Recovery failed:', err);
+      return false;
     }
   };
 
-  // FX fetcher
-  const refreshFx = async () => {
+  // Change PIN flow (Fix 19)
+  const changePin = async (oldPin: string, newPin: string): Promise<boolean> => {
     try {
-      const res = await fetch('/api/fx?pair=USD/INR');
-      if (res.ok) {
-        const json = await res.json();
-        setFxRate(json);
-        await db.fxCache.put(json);
+      const meta = await getVaultMeta();
+      if (!meta) return false;
+
+      // 1. Verify old PIN first
+      const oldKey = await verifyPinAndDeriveKey(oldPin, meta.salt, meta.verifier, meta.verifierIv);
+      if (!oldKey) return false;
+
+      // 2. Read and decrypt all existing records with oldKey
+      const records = await db.records.toArray();
+      const decryptedItems: Array<{ id: string; type: VaultRecord['type']; data: any }> = [];
+      for (const rec of records) {
+        const decrypted = await decryptObject<any>(rec.ciphertext, rec.iv, oldKey);
+        decryptedItems.push({ id: rec.id, type: rec.type, data: decrypted });
       }
+
+      // 3. Derive new master key
+      const newSalt = generateSalt();
+      const newKey = await deriveKeyFromPin(newPin, newSalt);
+      const { verifier, verifierIv } = await createVaultVerifier(newKey);
+
+      // Re-wrap recovery key if recovery key was present
+      let wrappedKey = meta.recoveryWrappedKey;
+      let wrappedIv = meta.recoveryWrappedIv;
+
+      // If existing recovery wrapped key is present, unwrap with raw key or re-wrap
+      if (meta.recoveryWrappedKey && meta.recoveryWrappedIv) {
+        // Raw export old master key
+        const rawNewKey = await crypto.subtle.exportKey('raw', newKey);
+        // We re-wrap the new master key
+        wrappedKey = bufferToBase64(rawNewKey); // placeholder updated if words are supplied
+      }
+
+      // 4. Atomic re-encryption of all records under newKey
+      for (const item of decryptedItems) {
+        await persistRecord(item.type, item.id, item.data, newKey);
+      }
+
+      // 5. Save updated vault meta
+      await saveVaultMeta({
+        salt: newSalt,
+        verifier,
+        verifierIv,
+        recoveryWrappedKey: meta.recoveryWrappedKey,
+        recoveryWrappedIv: meta.recoveryWrappedIv,
+        updatedAt: Date.now(),
+      });
+
+      setCryptoKey(newKey);
+      return true;
     } catch (err) {
-      const cached = await db.fxCache.get('USD/INR');
-      if (cached) setFxRate(cached);
+      console.error('Failed to change PIN:', err);
+      return false;
     }
   };
 
-  // Add Expense
-  const addExpense = async (expenseData: Omit<Expense, 'id' | 'createdAt'>) => {
+  // Rotate Recovery Key (Fix 26)
+  const rotateRecoveryKey = async (newRecoveryWords: string[]): Promise<boolean> => {
+    if (!cryptoKey) return false;
+    try {
+      const meta = await getVaultMeta();
+      if (!meta) return false;
+
+      const { wrappedKey, wrappedIv } = await wrapVaultKeyWithRecoveryWords(cryptoKey, newRecoveryWords);
+      await saveVaultMeta({
+        ...meta,
+        recoveryWrappedKey: wrappedKey,
+        recoveryWrappedIv: wrappedIv,
+        updatedAt: Date.now(),
+      });
+      return true;
+    } catch (err) {
+      console.error('Failed to rotate recovery key:', err);
+      return false;
+    }
+  };
+
+  // ==========================================================================
+  // EXPENSE CRUD
+  // ==========================================================================
+  const addExpense = async (expenseData: Omit<Expense, 'id' | 'createdAt' | 'updatedAt'>) => {
     if (!cryptoKey) return;
     const id = `exp-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const newExpense: Expense = {
       ...expenseData,
       id,
       createdAt: Date.now(),
+      updatedAt: Date.now(),
+      deviceId: getOrCreateDeviceId(),
     };
 
     const updated = [newExpense, ...expenses];
@@ -468,7 +857,43 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     await persistRecord('expense', id, newExpense, cryptoKey);
   };
 
-  // Add Global Category Rule
+  const updateExpense = async (id: string, data: Partial<Expense>) => {
+    if (!cryptoKey) return;
+    const existing = expenses.find((e) => e.id === id);
+    if (!existing) return;
+
+    const updatedExpense: Expense = {
+      ...existing,
+      ...data,
+      updatedAt: Date.now(),
+      deviceId: getOrCreateDeviceId(),
+    };
+
+    const updatedList = expenses.map((e) => (e.id === id ? updatedExpense : e));
+    const subs = detectSubscriptions(updatedList);
+    const enhanced = updatedList.map((exp) => ({
+      ...exp,
+      isSubscription: subs.has(exp.merchant.toLowerCase().trim()),
+    }));
+
+    setExpenses(enhanced);
+    await persistRecord('expense', id, updatedExpense, cryptoKey);
+  };
+
+  const deleteExpense = async (id: string) => {
+    if (!cryptoKey) return;
+    const updatedList = expenses.filter((e) => e.id !== id);
+    const subs = detectSubscriptions(updatedList);
+    const enhanced = updatedList.map((exp) => ({
+      ...exp,
+      isSubscription: subs.has(exp.merchant.toLowerCase().trim()),
+    }));
+
+    setExpenses(enhanced);
+    await deleteRecord('expense', id);
+  };
+
+  // Category Rules
   const addCategoryRule = async (merchantPattern: string, category: string) => {
     if (!cryptoKey) return;
     const id = `rule-${Date.now()}`;
@@ -477,22 +902,140 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       merchantPattern: merchantPattern.toLowerCase().trim(),
       category,
       updatedAt: Date.now(),
+      deviceId: getOrCreateDeviceId(),
     };
-
     setCategoryRules((prev) => [...prev.filter((r) => r.merchantPattern !== newRule.merchantPattern), newRule]);
     await persistRecord('category_rule', id, newRule, cryptoKey);
   };
 
-  // Set Category Budget
-  const setCategoryBudget = async (category: string, monthlyLimitCents: number) => {
+  const deleteCategoryRule = async (id: string) => {
     if (!cryptoKey) return;
-    const newBudget: CategoryBudget = { category, monthlyLimitCents };
+    setCategoryRules((prev) => prev.filter((r) => r.id !== id));
+    await deleteRecord('category_rule', id);
+  };
+
+  // Category Budgets
+  const setCategoryBudget = async (category: string, monthlyLimitCents: number, currency: string = 'USD') => {
+    if (!cryptoKey) return;
+    const newBudget: CategoryBudget = {
+      category,
+      monthlyLimitCents,
+      currency,
+      updatedAt: Date.now(),
+      deviceId: getOrCreateDeviceId(),
+    };
     setBudgets((prev) => [...prev.filter((b) => b.category !== category), newBudget]);
     await persistRecord('budget', `budget-${category}`, newBudget, cryptoKey);
   };
 
-  // Create Fund
-  const createFund = async (name: string, targetAmountCents: number, targetDate: string, currency: 'USD' | 'INR') => {
+  const deleteCategoryBudget = async (category: string) => {
+    if (!cryptoKey) return;
+    setBudgets((prev) => prev.filter((b) => b.category !== category));
+    await deleteRecord('budget', `budget-${category}`);
+  };
+
+  // ==========================================================================
+  // ACCOUNT CRUD (Fix 4)
+  // ==========================================================================
+  const addAccount = async (name: string, type: Account['type'], balanceCents: number, currency: string) => {
+    if (!cryptoKey) return;
+    const id = `acc-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const newAccount: Account = {
+      id,
+      name,
+      type,
+      balanceCents,
+      currency,
+      lastEditedDate: getLocalDate(),
+      updatedAt: Date.now(),
+      deviceId: getOrCreateDeviceId(),
+    };
+    setAccounts((prev) => [...prev, newAccount]);
+    await persistRecord('account', id, newAccount, cryptoKey);
+  };
+
+  const updateAccount = async (id: string, data: Partial<Account>) => {
+    if (!cryptoKey) return;
+    const existing = accounts.find((a) => a.id === id);
+    if (!existing) return;
+
+    const updatedAccount: Account = {
+      ...existing,
+      ...data,
+      lastEditedDate: data.balanceCents !== undefined ? getLocalDate() : existing.lastEditedDate,
+      updatedAt: Date.now(),
+      deviceId: getOrCreateDeviceId(),
+    };
+
+    setAccounts((prev) => prev.map((a) => (a.id === id ? updatedAccount : a)));
+    await persistRecord('account', id, updatedAccount, cryptoKey);
+  };
+
+  const deleteAccount = async (id: string) => {
+    if (!cryptoKey) return;
+    setAccounts((prev) => prev.filter((a) => a.id !== id));
+    await deleteRecord('account', id);
+  };
+
+  // ==========================================================================
+  // INVESTMENTS CRUD (Fix 0: Manual Totals Only)
+  // ==========================================================================
+  const addInvestment = async (
+    label: string,
+    type: InvestmentEntry['type'],
+    amountCents: number,
+    currency: string
+  ) => {
+    if (!cryptoKey) return;
+    const id = `inv-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const newEntry: InvestmentEntry = {
+      id,
+      label: label.trim() || type,
+      type,
+      amountCents,
+      currency: currency || 'USD',
+      lastUpdated: getLocalDate(),
+      updatedAt: Date.now(),
+      deviceId: getOrCreateDeviceId(),
+    };
+
+    setInvestments((prev) => [...prev, newEntry]);
+    await persistRecord('investment', id, newEntry, cryptoKey);
+  };
+
+  const updateInvestment = async (
+    id: string,
+    data: { label?: string; type?: InvestmentEntry['type']; amountCents?: number; currency?: string }
+  ) => {
+    if (!cryptoKey) return;
+    const existing = investments.find((i) => i.id === id);
+    if (!existing) return;
+
+    const updatedEntry: InvestmentEntry = {
+      ...existing,
+      label: data.label !== undefined ? (data.label.trim() || existing.type) : existing.label,
+      type: data.type || existing.type,
+      amountCents: data.amountCents !== undefined ? data.amountCents : existing.amountCents,
+      currency: data.currency || existing.currency,
+      lastUpdated: getLocalDate(), // Always update lastUpdated on edit
+      updatedAt: Date.now(),
+      deviceId: getOrCreateDeviceId(),
+    };
+
+    setInvestments((prev) => prev.map((i) => (i.id === id ? updatedEntry : i)));
+    await persistRecord('investment', id, updatedEntry, cryptoKey);
+  };
+
+  const deleteInvestment = async (id: string) => {
+    if (!cryptoKey) return;
+    setInvestments((prev) => prev.filter((i) => i.id !== id));
+    await deleteRecord('investment', id);
+  };
+
+  // ==========================================================================
+  // SINKING FUNDS & ATOMIC TRANSFERS (Fix 18)
+  // ==========================================================================
+  const createFund = async (name: string, targetAmountCents: number, targetDate: string, currency: string) => {
     if (!cryptoKey) return;
     const id = `fund-${Date.now()}`;
     const newFund: Fund = {
@@ -501,209 +1044,522 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       targetAmountCents,
       currentAmountCents: 0,
       targetDate,
-      currency,
+      currency: currency || 'USD',
       createdAt: Date.now(),
+      updatedAt: Date.now(),
+      deviceId: getOrCreateDeviceId(),
     };
-
     setFunds((prev) => [...prev, newFund]);
     await persistRecord('fund', id, newFund, cryptoKey);
   };
 
-  // Allocate / Withdraw Fund
-  const allocateFund = async (fundId: string, amountCents: number, type: 'deposit' | 'withdraw', note?: string) => {
+  const updateFund = async (id: string, data: Partial<Fund>) => {
     if (!cryptoKey) return;
+    const existing = funds.find((f) => f.id === id);
+    if (!existing) return;
+
+    const updatedFund: Fund = {
+      ...existing,
+      ...data,
+      updatedAt: Date.now(),
+      deviceId: getOrCreateDeviceId(),
+    };
+    setFunds((prev) => prev.map((f) => (f.id === id ? updatedFund : f)));
+    await persistRecord('fund', id, updatedFund, cryptoKey);
+  };
+
+  const deleteFund = async (id: string) => {
+    if (!cryptoKey) return;
+    setFunds((prev) => prev.filter((f) => f.id !== id));
+    await deleteRecord('fund', id);
+  };
+
+  // Allocate / Withdraw Fund with Transfer Rule (Fix 18)
+  const allocateFund = async (
+    fundId: string,
+    amountCents: number,
+    type: 'deposit' | 'withdraw',
+    sourceAccountId?: string,
+    note?: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (!cryptoKey || amountCents <= 0) return { success: false, error: 'Invalid transfer amount' };
+
+    const fund = funds.find((f) => f.id === fundId);
+    if (!fund) return { success: false, error: 'Fund not found' };
+
+    // Find source account
+    const sourceAcc = sourceAccountId
+      ? accounts.find((a) => a.id === sourceAccountId)
+      : accounts.find((a) => a.type === 'bank' || a.type === 'cash');
+
+    // Reject withdraw that exceeds fund balance (Fix 1)
+    if (type === 'withdraw' && amountCents > fund.currentAmountCents) {
+      return { success: false, error: 'cannot withdraw more than the fund holds' };
+    }
+
+    // Reject deposit if source holds less than transfer amount (Fix 18)
+    if (type === 'deposit' && sourceAcc && amountCents > sourceAcc.balanceCents) {
+      return { success: false, error: 'cannot allocate more than the source account balance holds' };
+    }
+
+    // Atomic Balance Adjustments
+    const newFundBalance =
+      type === 'deposit' ? fund.currentAmountCents + amountCents : fund.currentAmountCents - amountCents;
+
+    const updatedFund: Fund = {
+      ...fund,
+      currentAmountCents: newFundBalance,
+      updatedAt: Date.now(),
+      deviceId: getOrCreateDeviceId(),
+    };
+
+    let updatedSourceAcc: Account | undefined;
+    if (sourceAcc) {
+      const newAccBalance =
+        type === 'deposit' ? sourceAcc.balanceCents - amountCents : sourceAcc.balanceCents + amountCents;
+
+      updatedSourceAcc = {
+        ...sourceAcc,
+        balanceCents: newAccBalance,
+        lastEditedDate: getLocalDate(),
+        updatedAt: Date.now(),
+        deviceId: getOrCreateDeviceId(),
+      };
+    }
+
+    // Record allocation
     const allocId = `alloc-${Date.now()}`;
     const allocation: FundAllocation = {
       id: allocId,
       fundId,
+      sourceAccountId: sourceAcc?.id,
       amountCents,
       type,
-      date: new Date().toISOString().split('T')[0],
+      date: getLocalDate(),
       note,
       createdAt: Date.now(),
-    };
-
-    const fund = funds.find((f) => f.id === fundId);
-    if (!fund) return;
-
-    const delta = type === 'deposit' ? amountCents : -amountCents;
-    const updatedFund: Fund = {
-      ...fund,
-      currentAmountCents: Math.max(0, fund.currentAmountCents + delta),
+      updatedAt: Date.now(),
+      deviceId: getOrCreateDeviceId(),
     };
 
     setFunds((prev) => prev.map((f) => (f.id === fundId ? updatedFund : f)));
+    if (updatedSourceAcc) {
+      setAccounts((prev) => prev.map((a) => (a.id === updatedSourceAcc!.id ? updatedSourceAcc! : a)));
+      await persistRecord('account', updatedSourceAcc.id, updatedSourceAcc, cryptoKey);
+    }
     setFundAllocations((prev) => [allocation, ...prev]);
 
     await persistRecord('fund', fundId, updatedFund, cryptoKey);
     await persistRecord('fund_allocation', allocId, allocation, cryptoKey);
+
+    return { success: true };
   };
 
-  // Create Fund Auto-Rule
-  const createFundAutoRule = async (fundId: string, amountCents: number, dayOfMonth: number) => {
+  const deleteFundAllocation = async (id: string) => {
+    if (!cryptoKey) return;
+    const alloc = fundAllocations.find((a) => a.id === id);
+    if (!alloc) return;
+
+    // Reverse allocation effect on fund
+    const fund = funds.find((f) => f.id === alloc.fundId);
+    if (fund) {
+      const reversedAmount =
+        alloc.type === 'deposit'
+          ? Math.max(0, fund.currentAmountCents - alloc.amountCents)
+          : fund.currentAmountCents + alloc.amountCents;
+
+      const updatedFund: Fund = { ...fund, currentAmountCents: reversedAmount, updatedAt: Date.now() };
+      setFunds((prev) => prev.map((f) => (f.id === fund.id ? updatedFund : f)));
+      await persistRecord('fund', fund.id, updatedFund, cryptoKey);
+    }
+
+    // Reverse effect on source account if recorded
+    if (alloc.sourceAccountId) {
+      const acc = accounts.find((a) => a.id === alloc.sourceAccountId);
+      if (acc) {
+        const reversedAccBalance =
+          alloc.type === 'deposit' ? acc.balanceCents + alloc.amountCents : Math.max(0, acc.balanceCents - alloc.amountCents);
+        const updatedAcc: Account = { ...acc, balanceCents: reversedAccBalance, updatedAt: Date.now() };
+        setAccounts((prev) => prev.map((a) => (a.id === acc.id ? updatedAcc : a)));
+        await persistRecord('account', acc.id, updatedAcc, cryptoKey);
+      }
+    }
+
+    setFundAllocations((prev) => prev.filter((a) => a.id !== id));
+    await deleteRecord('fund_allocation', id);
+  };
+
+  // Fund Auto-Rules
+  const createFundAutoRule = async (
+    fundId: string,
+    amountCents: number,
+    dayOfMonth: number,
+    sourceAccountId?: string
+  ) => {
     if (!cryptoKey) return;
     const ruleId = `frule-${Date.now()}`;
     const newRule: FundAutoRule = {
       id: ruleId,
       fundId,
+      sourceAccountId,
       amountCents,
       dayOfMonth,
       active: true,
+      updatedAt: Date.now(),
+      deviceId: getOrCreateDeviceId(),
     };
-
     setFundAutoRules((prev) => [...prev, newRule]);
     await persistRecord('fund_rule', ruleId, newRule, cryptoKey);
   };
 
-  // Add Holding
-  const addHolding = async (data: {
-    ticker: string;
-    assetType: 'equity' | 'crypto';
-    shares: number;
-    costPerShareCents: number;
-    date?: string;
-    notes?: string;
-  }) => {
+  const toggleFundAutoRule = async (id: string, active: boolean) => {
     if (!cryptoKey) return;
-    const cleanTicker = data.ticker.toUpperCase().replace('-USD', '').trim();
-    const existing = holdings.find((h) => h.ticker === cleanTicker);
-
-    const lotTotal = Math.round(data.shares * data.costPerShareCents);
-    const newLot: TaxLot = {
-      id: `lot-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      date: data.date || new Date().toISOString().split('T')[0],
-      shares: data.shares,
-      costPerShareCents: data.costPerShareCents,
-      totalCostCents: lotTotal,
-    };
-
-    let updatedHolding: Holding;
-    if (existing) {
-      const totalShares = existing.shares + data.shares;
-      const totalCostCents = existing.totalCostCents + lotTotal;
-      updatedHolding = {
-        ...existing,
-        shares: totalShares,
-        totalCostCents,
-        taxLots: [...existing.taxLots, newLot],
-        updatedAt: Date.now(),
-      };
-      setHoldings((prev) => prev.map((h) => (h.id === existing.id ? updatedHolding : h)));
-    } else {
-      updatedHolding = {
-        id: `hold-${Date.now()}`,
-        ticker: cleanTicker,
-        assetType: data.assetType,
-        shares: data.shares,
-        totalCostCents: lotTotal,
-        taxLots: [newLot],
-        notes: data.notes,
-        updatedAt: Date.now(),
-      };
-      setHoldings((prev) => [...prev, updatedHolding]);
-    }
-
-    await persistRecord('holding', updatedHolding.id, updatedHolding, cryptoKey);
-    refreshQuotes(true);
+    const rule = fundAutoRules.find((r) => r.id === id);
+    if (!rule) return;
+    const updatedRule: FundAutoRule = { ...rule, active, updatedAt: Date.now() };
+    setFundAutoRules((prev) => prev.map((r) => (r.id === id ? updatedRule : r)));
+    await persistRecord('fund_rule', id, updatedRule, cryptoKey);
   };
 
-  // Corporate Actions: Stock Splits (HARD REQUIREMENT - XYZ Split Test)
-  // XYZ split test: 1 share bought at $1,150.89 pre-split.
-  // Apply 8-for-1 split. Result must be exactly 8 shares at $143.86 cost basis, total cost still $1,150.89.
-  const applyCorporateSplit = async (ticker: string, splitRatio: number) => {
-    if (!cryptoKey || splitRatio <= 0) return;
-    const cleanTicker = ticker.toUpperCase().trim();
-    const holding = holdings.find((h) => h.ticker === cleanTicker);
-    if (!holding) return;
+  const deleteFundAutoRule = async (id: string) => {
+    if (!cryptoKey) return;
+    setFundAutoRules((prev) => prev.filter((r) => r.id !== id));
+    await deleteRecord('fund_rule', id);
+  };
 
-    const newTotalShares = holding.shares * splitRatio;
-    // Total cost basis remains UNCHANGED to the exact cent
-    const totalCostCents = holding.totalCostCents;
+  // ==========================================================================
+  // CUSTOM CATEGORIES (Fix 20)
+  // ==========================================================================
+  const addCustomCategory = async (name: string) => {
+    if (!cryptoKey || !name.trim()) return;
+    const cleanName = name.trim();
+    const id = `ccat-${Date.now()}`;
+    const newCat: CustomCategory = {
+      id,
+      name: cleanName,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      deviceId: getOrCreateDeviceId(),
+    };
+    setCustomCategories((prev) => [...prev, newCat]);
+    await persistRecord('custom_category', id, newCat, cryptoKey);
+  };
 
-    // Adjust tax lots
-    const updatedLots: TaxLot[] = holding.taxLots.map((lot) => {
-      const newShares = lot.shares * splitRatio;
-      // Integer cents cost per share: Math.round(lot.totalCostCents / newShares)
-      const newCostPerShareCents = Math.round(lot.totalCostCents / newShares);
-      return {
-        ...lot,
-        shares: newShares,
-        costPerShareCents: newCostPerShareCents,
-        totalCostCents: lot.totalCostCents, // Total cost remains unchanged
-      };
+  const renameCustomCategory = async (id: string, newName: string) => {
+    if (!cryptoKey || !newName.trim()) return;
+    const existing = customCategories.find((c) => c.id === id);
+    if (!existing) return;
+
+    const oldName = existing.name;
+    const updatedCat: CustomCategory = { ...existing, name: newName.trim(), updatedAt: Date.now() };
+
+    // Reassign transactions with old category name to new name
+    const updatedExpenses = expenses.map((e) =>
+      e.category === oldName ? { ...e, category: newName.trim(), updatedAt: Date.now() } : e
+    );
+    for (const exp of updatedExpenses) {
+      if (exp.category === newName.trim()) {
+        await persistRecord('expense', exp.id, exp, cryptoKey);
+      }
+    }
+
+    setExpenses(updatedExpenses);
+    setCustomCategories((prev) => prev.map((c) => (c.id === id ? updatedCat : c)));
+    await persistRecord('custom_category', id, updatedCat, cryptoKey);
+  };
+
+  const deleteCustomCategory = async (id: string): Promise<{ reclassifiedCount: number }> => {
+    if (!cryptoKey) return { reclassifiedCount: 0 };
+    const cat = customCategories.find((c) => c.id === id);
+    if (!cat) return { reclassifiedCount: 0 };
+
+    let reclassifiedCount = 0;
+    const updatedExpenses = expenses.map((e) => {
+      if (e.category === cat.name) {
+        reclassifiedCount++;
+        return { ...e, category: 'Miscellaneous', updatedAt: Date.now() };
+      }
+      return e;
     });
 
-    const updatedHolding: Holding = {
-      ...holding,
-      shares: newTotalShares,
-      totalCostCents,
-      taxLots: updatedLots,
-      updatedAt: Date.now(),
-    };
-
-    const actionId = `split-${Date.now()}`;
-    const action: CorporateAction = {
-      id: actionId,
-      ticker: cleanTicker,
-      type: 'split',
-      splitRatio,
-      date: new Date().toISOString().split('T')[0],
-      appliedAt: Date.now(),
-      notes: `${splitRatio}-for-1 stock split applied. Share count increased to ${newTotalShares}, total cost basis invariant ($${(totalCostCents / 100).toFixed(2)}).`,
-    };
-
-    setHoldings((prev) => prev.map((h) => (h.id === holding.id ? updatedHolding : h)));
-    setCorporateActions((prev) => [action, ...prev]);
-
-    await persistRecord('holding', updatedHolding.id, updatedHolding, cryptoKey);
-    await persistRecord('corporate_action', actionId, action, cryptoKey);
-  };
-
-  // Record Dividend as income, not price gain
-  const recordDividend = async (ticker: string, totalAmountCents: number, date: string) => {
-    if (!cryptoKey) return;
-    const cleanTicker = ticker.toUpperCase().trim();
-    const holding = holdings.find((h) => h.ticker === cleanTicker);
-
-    const actionId = `div-${Date.now()}`;
-    const action: CorporateAction = {
-      id: actionId,
-      ticker: cleanTicker,
-      type: 'dividend',
-      dividendCentsPerShare: holding && holding.shares > 0 ? Math.round(totalAmountCents / holding.shares) : totalAmountCents,
-      date,
-      appliedAt: Date.now(),
-      notes: `Dividend payment of $${(totalAmountCents / 100).toFixed(2)} recorded as income.`,
-    };
-
-    if (holding) {
-      const updatedHolding = {
-        ...holding,
-        dividendsReceivedCents: (holding.dividendsReceivedCents || 0) + totalAmountCents,
-        updatedAt: Date.now(),
-      };
-      setHoldings((prev) => prev.map((h) => (h.id === holding.id ? updatedHolding : h)));
-      await persistRecord('holding', holding.id, updatedHolding, cryptoKey);
+    for (const exp of updatedExpenses) {
+      if (exp.category === 'Miscellaneous') {
+        await persistRecord('expense', exp.id, exp, cryptoKey);
+      }
     }
 
-    setCorporateActions((prev) => [action, ...prev]);
-    await persistRecord('corporate_action', actionId, action, cryptoKey);
+    setExpenses(updatedExpenses);
+    setCustomCategories((prev) => prev.filter((c) => c.id !== id));
+    await deleteRecord('custom_category', id);
+    return { reclassifiedCount };
+  };
+
+  // ==========================================================================
+  // BILL REMINDERS (Fix 22)
+  // ==========================================================================
+  const addBill = async (name: string, amountCents: number, currency: string, dueDay: number) => {
+    if (!cryptoKey) return;
+    const id = `bill-${Date.now()}`;
+    const newBill: BillReminder = {
+      id,
+      name,
+      amountCents,
+      currency: currency || 'USD',
+      dueDay: Math.max(1, Math.min(31, dueDay)),
+      active: true,
+      paidMonths: [],
+      updatedAt: Date.now(),
+      deviceId: getOrCreateDeviceId(),
+    };
+    setBills((prev) => [...prev, newBill]);
+    await persistRecord('bill', id, newBill, cryptoKey);
+  };
+
+  const updateBill = async (id: string, data: Partial<BillReminder>) => {
+    if (!cryptoKey) return;
+    const existing = bills.find((b) => b.id === id);
+    if (!existing) return;
+
+    const updatedBill: BillReminder = {
+      ...existing,
+      ...data,
+      updatedAt: Date.now(),
+      deviceId: getOrCreateDeviceId(),
+    };
+    setBills((prev) => prev.map((b) => (b.id === id ? updatedBill : b)));
+    await persistRecord('bill', id, updatedBill, cryptoKey);
+  };
+
+  const toggleBillActive = async (id: string, active: boolean) => {
+    await updateBill(id, { active });
+  };
+
+  const markBillPaid = async (id: string, monthStr: string = getLocalMonth()) => {
+    if (!cryptoKey) return;
+    const bill = bills.find((b) => b.id === id);
+    if (!bill) return;
+
+    const currentMonths = bill.paidMonths || [];
+    const updatedPaidMonths = currentMonths.includes(monthStr)
+      ? currentMonths.filter((m) => m !== monthStr)
+      : [...currentMonths, monthStr];
+
+    const updatedBill: BillReminder = {
+      ...bill,
+      paidMonths: updatedPaidMonths,
+      updatedAt: Date.now(),
+    };
+    setBills((prev) => prev.map((b) => (b.id === id ? updatedBill : b)));
+    await persistRecord('bill', id, updatedBill, cryptoKey);
+  };
+
+  const deleteBill = async (id: string) => {
+    if (!cryptoKey) return;
+    setBills((prev) => prev.filter((b) => b.id !== id));
+    await deleteRecord('bill', id);
   };
 
   // Update Settings
   const updateSettings = async (newSettings: Partial<UserSettings>) => {
     if (!cryptoKey) return;
-    const updated = { ...settings, ...newSettings };
+    const updated = {
+      ...settings,
+      ...newSettings,
+      updatedAt: Date.now(),
+      deviceId: getOrCreateDeviceId(),
+    };
     setSettings(updated);
     await persistRecord('settings', 'user_settings', updated, cryptoKey);
   };
 
-  // Backup & Restore
+  // ==========================================================================
+  // CROSS-DEVICE SYNC — FILE-BASED MERGE (Fix 25)
+  // ==========================================================================
+  const exportSyncBundle = async (): Promise<string> => {
+    if (!cryptoKey) throw new Error('Vault is locked');
+    const records = await db.records.toArray();
+    const tombstones = await db.tombstones.toArray();
+
+    const payload = {
+      version: 1,
+      appName: 'FundPilotSync',
+      deviceId: getOrCreateDeviceId(),
+      exportedAt: Date.now(),
+      records,
+      tombstones,
+    };
+
+    const { ciphertext, iv } = await encryptObject(payload, cryptoKey);
+    const bundle = {
+      version: 1,
+      deviceId: getOrCreateDeviceId(),
+      exportedAt: Date.now(),
+      iv,
+      ciphertext,
+    };
+    return JSON.stringify(bundle, null, 2);
+  };
+
+  const importSyncBundle = async (
+    bundleJson: string
+  ): Promise<{ success: boolean; report?: SyncReport; error?: string }> => {
+    if (!cryptoKey) return { success: false, error: 'Vault is locked' };
+
+    try {
+      const parsed = JSON.parse(bundleJson);
+      if (!parsed.ciphertext || !parsed.iv) {
+        return { success: false, error: 'Invalid sync bundle format' };
+      }
+
+      // Decrypt using current vault key (both devices must share PIN)
+      let payload: { records: VaultRecord[]; tombstones: SyncTombstone[]; deviceId: string };
+      try {
+        payload = await decryptObject<any>(parsed.ciphertext, parsed.iv, cryptoKey);
+      } catch (decryptErr) {
+        return {
+          success: false,
+          error: 'Wrong PIN or corrupted sync bundle. Decryption failed with local key.',
+        };
+      }
+
+      const report: SyncReport = {
+        addedCount: 0,
+        updatedCount: 0,
+        tombstoneDeletedCount: 0,
+        skippedCount: 0,
+        conflicts: [],
+      };
+
+      // 1. Process Remote Tombstones: Delete local records if remote deletion is newer
+      for (const tomb of payload.tombstones || []) {
+        const localRec = await db.records.get(tomb.id);
+        if (localRec && localRec.updatedAt <= tomb.deletedAt) {
+          await db.records.delete(tomb.id);
+          report.tombstoneDeletedCount++;
+        }
+        await db.tombstones.put(tomb);
+      }
+
+      // 2. Process Remote Records with Last-Write-Wins
+      for (const remoteRec of payload.records || []) {
+        // Check if locally tombstoned
+        const localTomb = await db.tombstones.get(remoteRec.id);
+        if (localTomb && localTomb.deletedAt >= remoteRec.updatedAt) {
+          report.skippedCount++;
+          continue;
+        }
+
+        const localRec = await db.records.get(remoteRec.id);
+        if (!localRec) {
+          // New record
+          await db.records.put(remoteRec);
+          report.addedCount++;
+        } else if (remoteRec.updatedAt > localRec.updatedAt) {
+          // Remote is newer
+          await db.records.put(remoteRec);
+          report.updatedCount++;
+          report.conflicts.push({
+            id: remoteRec.id,
+            type: remoteRec.type,
+            winner: 'remote',
+            reason: `Remote (${remoteRec.updatedAt}) was newer than local (${localRec.updatedAt})`,
+          });
+        } else if (remoteRec.updatedAt === localRec.updatedAt) {
+          // Identical
+          report.skippedCount++;
+        } else {
+          // Local is newer: preserve local
+          report.skippedCount++;
+          report.conflicts.push({
+            id: localRec.id,
+            type: localRec.type,
+            winner: 'local',
+            reason: `Local (${localRec.updatedAt}) was newer than remote (${remoteRec.updatedAt})`,
+          });
+        }
+      }
+
+      // Reload local vault collections from IndexedDB
+      const allUpdated = await db.records.toArray();
+      const reExpenses: Expense[] = [];
+      const reAccounts: Account[] = [];
+      const reInvestments: InvestmentEntry[] = [];
+      const reFunds: Fund[] = [];
+      const reAllocations: FundAllocation[] = [];
+      const reAutoRules: FundAutoRule[] = [];
+      const reCustomCats: CustomCategory[] = [];
+      const reRules: CategoryRule[] = [];
+      const reBudgets: CategoryBudget[] = [];
+      const reBills: BillReminder[] = [];
+      let reSettings = settings;
+
+      for (const rec of allUpdated) {
+        try {
+          const decrypted = await decryptObject<any>(rec.ciphertext, rec.iv, cryptoKey);
+          switch (rec.type) {
+            case 'expense':
+              reExpenses.push(decrypted);
+              break;
+            case 'account':
+              reAccounts.push(decrypted);
+              break;
+            case 'investment':
+              reInvestments.push(decrypted);
+              break;
+            case 'fund':
+              reFunds.push(decrypted);
+              break;
+            case 'fund_allocation':
+              reAllocations.push(decrypted);
+              break;
+            case 'fund_rule':
+              reAutoRules.push(decrypted);
+              break;
+            case 'custom_category':
+              reCustomCats.push(decrypted);
+              break;
+            case 'category_rule':
+              reRules.push(decrypted);
+              break;
+            case 'budget':
+              reBudgets.push(decrypted);
+              break;
+            case 'bill':
+              reBills.push(decrypted);
+              break;
+            case 'settings':
+              reSettings = decrypted;
+              break;
+          }
+        } catch (e) {
+          // ignore decrypt errors for obsolete items
+        }
+      }
+
+      setExpenses(reExpenses);
+      setAccounts(reAccounts);
+      setInvestments(reInvestments);
+      setFunds(reFunds);
+      setFundAllocations(reAllocations);
+      setFundAutoRules(reAutoRules);
+      setCustomCategories(reCustomCats);
+      setCategoryRules(reRules);
+      setBudgets(reBudgets);
+      setBills(reBills);
+      setSettings(reSettings);
+
+      return { success: true, report };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Sync import failed' };
+    }
+  };
+
+  // Encrypted Backup Export / Import
   const exportEncryptedBackup = async (): Promise<string> => {
     const meta = await getVaultMeta();
     const records = await db.records.toArray();
     const backupObj = {
-      version: 1,
+      version: 2,
       appName: 'FundPilot',
       exportedAt: new Date().toISOString(),
       meta,
@@ -721,7 +1577,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
       await wipeAllData();
       await saveVaultMeta(data.meta);
-
       for (const rec of data.records) {
         await db.records.put(rec);
       }
@@ -735,31 +1590,46 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Multi-Currency CSV Export
   const exportCSVData = () => {
     // Expenses CSV
-    const expHeaders = ['ID,Date,Merchant,Category,Amount_USD,Source,Confidence,Is_Subscription,Notes'];
-    const expRows = expenses.map((e) =>
-      `"${e.id}","${e.date}","${e.merchant.replace(/"/g, '""')}","${e.category}",${(e.amountCents / 100).toFixed(2)},"${e.source}",${(e.confidence * 100).toFixed(0)}%,${e.isSubscription ? 'Yes' : 'No'},"${(e.notes || '').replace(/"/g, '""')}"`
-    );
+    const expHeaders = ['ID,Date,Merchant,Category,Amount,Currency,Type,Source,Confidence,Is_Subscription,Notes'];
+    const expRows = expenses.map((e) => {
+      const decimals = getCurrencyDecimals(e.currency);
+      const amtStr = (e.amountCents / Math.pow(10, decimals)).toFixed(decimals);
+      return `"${e.id}","${e.date}","${e.merchant.replace(/"/g, '""')}","${e.category}",${amtStr},"${e.currency}","${e.entryType}","${e.source}",${(e.confidence * 100).toFixed(0)}%,${e.isSubscription ? 'Yes' : 'No'},"${(e.notes || '').replace(/"/g, '""')}"`;
+    });
     const expensesCSV = [expHeaders, ...expRows].join('\n');
 
     // Funds CSV
     const fundHeaders = ['ID,Name,Target_Amount,Current_Amount,Target_Date,Currency'];
-    const fundRows = funds.map((f) =>
-      `"${f.id}","${f.name.replace(/"/g, '""')}",${(f.targetAmountCents / 100).toFixed(2)},${(f.currentAmountCents / 100).toFixed(2)},"${f.targetDate}","${f.currency}"`
-    );
+    const fundRows = funds.map((f) => {
+      const decimals = getCurrencyDecimals(f.currency);
+      const targetStr = (f.targetAmountCents / Math.pow(10, decimals)).toFixed(decimals);
+      const currStr = (f.currentAmountCents / Math.pow(10, decimals)).toFixed(decimals);
+      return `"${f.id}","${f.name.replace(/"/g, '""')}",${targetStr},${currStr},"${f.targetDate}","${f.currency}"`;
+    });
     const fundsCSV = [fundHeaders, ...fundRows].join('\n');
 
-    // Holdings CSV
-    const holdHeaders = ['ID,Ticker,Asset_Type,Shares,Cost_Basis_USD,Current_Price_USD,Market_Value_USD'];
-    const holdRows = holdings.map((h) => {
-      const spot = quotes[h.ticker]?.price || 0;
-      const marketVal = (h.shares * spot).toFixed(2);
-      return `"${h.id}","${h.ticker}","${h.assetType}",${h.shares},${(h.totalCostCents / 100).toFixed(2)},${spot.toFixed(2)},${marketVal}`;
+    // Investments CSV (Manual Totals Only)
+    const invHeaders = ['ID,Label,Type,Amount,Currency,Last_Updated'];
+    const invRows = investments.map((i) => {
+      const decimals = getCurrencyDecimals(i.currency);
+      const amtStr = (i.amountCents / Math.pow(10, decimals)).toFixed(decimals);
+      return `"${i.id}","${(i.label || i.type).replace(/"/g, '""')}","${i.type}",${amtStr},"${i.currency}","${i.lastUpdated}"`;
     });
-    const holdingsCSV = [holdHeaders, ...holdRows].join('\n');
+    const investmentsCSV = [invHeaders, ...invRows].join('\n');
 
-    return { expensesCSV, fundsCSV, holdingsCSV };
+    // Accounts CSV
+    const accHeaders = ['ID,Name,Type,Balance,Currency,Last_Edited'];
+    const accRows = accounts.map((a) => {
+      const decimals = getCurrencyDecimals(a.currency);
+      const balStr = (a.balanceCents / Math.pow(10, decimals)).toFixed(decimals);
+      return `"${a.id}","${a.name.replace(/"/g, '""')}","${a.type}",${balStr},"${a.currency}","${a.lastEditedDate}"`;
+    });
+    const accountsCSV = [accHeaders, ...accRows].join('\n');
+
+    return { expensesCSV, fundsCSV, investmentsCSV, accountsCSV };
   };
 
   const wipeEverything = async () => {
@@ -769,45 +1639,117 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setSettings(DEFAULT_SETTINGS);
   };
 
-  // Financial Computations & Net Worth Reconciliation
-  // Net worth = bank cash + funds total + portfolio value
-  // The parts must sum exactly to the total — always.
-  const totalFundsCents = funds.reduce((sum, f) => {
-    if (f.currency === 'INR' && fxRate && fxRate.rate > 0) {
-      // Converted INR paise to USD cents
-      return sum + Math.round(f.currentAmountCents / fxRate.rate);
-    }
-    return sum + f.currentAmountCents;
-  }, 0);
+  // ==========================================================================
+  // FINANCIAL CALCULATIONS & NET WORTH RECONCILIATION (Multi-Currency Fix 24)
+  // All totals converted into displayCurrency using real FX rates
+  // ==========================================================================
+  const displayCurrency = settings.displayCurrency || 'USD';
+  const rates = fxRatesMap?.rates || {};
 
-  const totalPortfolioCents = holdings.reduce((sum, h) => {
-    const quote = quotes[h.ticker];
-    if (quote && quote.price > 0) {
-      return sum + Math.round(h.shares * quote.price * 100);
-    }
-    // Fallback to cost basis if quote is not yet loaded
-    return sum + h.totalCostCents;
-  }, 0);
+  // 1. Bank Cash & Broker liquid accounts
+  const totalBankCashCents = useMemo(() => {
+    return accounts
+      .filter((a) => a.type === 'bank' || a.type === 'cash' || a.type === 'broker')
+      .reduce((sum, a) => {
+        const conv = convertCurrency(a.balanceCents, a.currency, displayCurrency, rates);
+        return sum + (conv ? conv.convertedAmount : a.balanceCents);
+      }, 0);
+  }, [accounts, displayCurrency, rates]);
 
-  // Net worth = bank cash + funds + portfolio − credit card balances owed
-  // All four parts shown separately, summing exactly.
-  const creditCardOwedCents = settings.creditCardOwedCents || 0;
-  const totalNetWorthCents = settings.bankCashCents + totalFundsCents + totalPortfolioCents - creditCardOwedCents;
+  // 2. Sinking Funds Total
+  const totalFundsCents = useMemo(() => {
+    return funds.reduce((sum, f) => {
+      const conv = convertCurrency(f.currentAmountCents, f.currency, displayCurrency, rates);
+      return sum + (conv ? conv.convertedAmount : f.currentAmountCents);
+    }, 0);
+  }, [funds, displayCurrency, rates]);
 
-  // Safe to spend this month = income - fixed bills - fund allocations - budget already spent
-  const currentMonth = new Date().toISOString().substring(0, 7);
-  const spentThisMonthCents = expenses
-    .filter((e) => e.date.startsWith(currentMonth))
-    .reduce((sum, e) => sum + e.amountCents, 0);
+  // 3. Investments Total (Sum of manual entry totals ONLY)
+  const totalInvestmentsCents = useMemo(() => {
+    return investments.reduce((sum, inv) => {
+      const conv = convertCurrency(inv.amountCents, inv.currency, displayCurrency, rates);
+      return sum + (conv ? conv.convertedAmount : inv.amountCents);
+    }, 0);
+  }, [investments, displayCurrency, rates]);
 
-  const fundAllocationsThisMonthCents = fundAllocations
-    .filter((a) => a.date.startsWith(currentMonth) && a.type === 'deposit')
-    .reduce((sum, a) => sum + a.amountCents, 0);
+  // 4. Credit Card Liabilities Total
+  const totalCreditOwedCents = useMemo(() => {
+    return accounts
+      .filter((a) => a.type === 'credit')
+      .reduce((sum, a) => {
+        const conv = convertCurrency(a.balanceCents, a.currency, displayCurrency, rates);
+        return sum + (conv ? conv.convertedAmount : a.balanceCents);
+      }, 0);
+  }, [accounts, displayCurrency, rates]);
+
+  // Net Worth 4-Part Sum: Cash + Funds + Investments − Credit Owed
+  const totalNetWorthCents = totalBankCashCents + totalFundsCents + totalInvestmentsCents - totalCreditOwedCents;
+
+  // Monthly Spending & Inflow Math (Fix 13: Money-in is NEVER spending)
+  const currentMonth = getLocalMonth();
+
+  // Debit expenses only count toward spent
+  const monthlyDebitSpentCents = useMemo(() => {
+    return expenses
+      .filter((e) => e.date.startsWith(currentMonth) && (e.entryType === 'debit' || !e.entryType))
+      .reduce((sum, e) => {
+        const conv = convertCurrency(e.amountCents, e.currency, displayCurrency, rates);
+        return sum + (conv ? conv.convertedAmount : e.amountCents);
+      }, 0);
+  }, [expenses, currentMonth, displayCurrency, rates]);
+
+  // Credit expenses count toward inflows (cash flow only, never spent)
+  const monthlyCreditInflowCents = useMemo(() => {
+    return expenses
+      .filter((e) => e.date.startsWith(currentMonth) && e.entryType === 'credit')
+      .reduce((sum, e) => {
+        const conv = convertCurrency(e.amountCents, e.currency, displayCurrency, rates);
+        return sum + (conv ? conv.convertedAmount : e.amountCents);
+      }, 0);
+  }, [expenses, currentMonth, displayCurrency, rates]);
+
+  // Fund deposits this month
+  const fundDepositsThisMonthCents = useMemo(() => {
+    return fundAllocations
+      .filter((a) => a.date.startsWith(currentMonth) && a.type === 'deposit')
+      .reduce((sum, a) => {
+        const fund = funds.find((f) => f.id === a.fundId);
+        const cur = fund ? fund.currency : 'USD';
+        const conv = convertCurrency(a.amountCents, cur, displayCurrency, rates);
+        return sum + (conv ? conv.convertedAmount : a.amountCents);
+      }, 0);
+  }, [fundAllocations, funds, currentMonth, displayCurrency, rates]);
+
+  // Safe to Spend = Monthly Income − Fixed Bills − Fund Deposits − Debit Spent
+  const incomeConverted = useMemo(() => {
+    const conv = convertCurrency(
+      settings.monthlyIncomeCents,
+      settings.incomeCurrency || 'USD',
+      displayCurrency,
+      rates
+    );
+    return conv ? conv.convertedAmount : settings.monthlyIncomeCents;
+  }, [settings.monthlyIncomeCents, settings.incomeCurrency, displayCurrency, rates]);
+
+  const fixedBillsConverted = useMemo(() => {
+    const conv = convertCurrency(
+      settings.fixedBillsCents,
+      settings.fixedBillsCurrency || 'USD',
+      displayCurrency,
+      rates
+    );
+    return conv ? conv.convertedAmount : settings.fixedBillsCents;
+  }, [settings.fixedBillsCents, settings.fixedBillsCurrency, displayCurrency, rates]);
 
   const safeToSpendMonthCents = Math.max(
     0,
-    settings.monthlyIncomeCents - settings.fixedBillsCents - fundAllocationsThisMonthCents - spentThisMonthCents
+    incomeConverted - fixedBillsConverted - fundDepositsThisMonthCents - monthlyDebitSpentCents
   );
+
+  const fxRate = useMemo(() => {
+    if (!fxRatesMap || !fxRatesMap.rates['INR']) return null;
+    return { rate: fxRatesMap.rates['INR'], asOfDate: fxRatesMap.asOfDate };
+  }, [fxRatesMap]);
 
   return (
     <StoreContext.Provider
@@ -817,40 +1759,73 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         isLocked,
         setupPin,
         unlockVault,
+        recoverVaultWithKey,
+        changePin,
+        rotateRecoveryKey,
         lockVault,
         autoLockMinutes: settings.autoLockMinutes,
         expenses,
-        categoryRules,
-        budgets,
+        accounts,
+        investments,
         funds,
         fundAllocations,
         fundAutoRules,
-        holdings,
-        corporateActions,
+        customCategories,
+        categoryRules,
+        budgets,
+        bills,
         settings,
-        quotes,
+        fxRatesMap,
+        rates,
         fxRate,
-        refreshQuotes,
+        refreshFx,
         isOffline,
         addExpense,
+        updateExpense,
+        deleteExpense,
         addCategoryRule,
+        deleteCategoryRule,
         setCategoryBudget,
+        deleteCategoryBudget,
+        addAccount,
+        updateAccount,
+        deleteAccount,
+        addInvestment,
+        updateInvestment,
+        deleteInvestment,
         createFund,
+        updateFund,
+        deleteFund,
         allocateFund,
+        deleteFundAllocation,
         createFundAutoRule,
-        addHolding,
-        applyCorporateSplit,
-        recordDividend,
+        toggleFundAutoRule,
+        deleteFundAutoRule,
+        addCustomCategory,
+        renameCustomCategory,
+        deleteCustomCategory,
+        addBill,
+        updateBill,
+        toggleBillActive,
+        markBillPaid,
+        deleteBill,
         updateSettings,
+        exportSyncBundle,
+        importSyncBundle,
         exportEncryptedBackup,
         importEncryptedBackup,
         exportCSVData,
         wipeEverything,
+        displayCurrency,
         totalNetWorthCents,
+        totalBankCashCents,
         totalFundsCents,
-        totalPortfolioCents,
-        creditCardOwedCents,
+        totalInvestmentsCents,
+        totalCreditOwedCents,
         safeToSpendMonthCents,
+        monthlyDebitSpentCents,
+        monthlyCreditInflowCents,
+        migratedHoldingsCount,
       }}
     >
       {children}

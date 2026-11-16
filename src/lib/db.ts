@@ -1,10 +1,11 @@
-// Dexie.js Local-First Database Layer
+// Dexie.js Local-First Database Layer — Final Architecture
 // All user financial records are encrypted with AES-GCM before storage.
 // Raw records in IndexedDB contain ONLY ciphertext and random IVs.
 // No plaintext amounts, balances, or merchants exist in persistent storage.
+// The ONLY network call in the whole app is currency codes -> FX rates. No quote fetching.
 
 import Dexie, { Table } from 'dexie';
-import { VaultRecord, QuoteData, FxRateData, EncryptedVaultMeta } from './types';
+import { VaultRecord, FxRatesMap, EncryptedVaultMeta, SyncTombstone } from './types';
 
 export interface MetaRecord {
   key: string;
@@ -14,16 +15,16 @@ export interface MetaRecord {
 export class FundPilotDB extends Dexie {
   meta!: Table<MetaRecord, string>;
   records!: Table<VaultRecord, string>;
-  quotesCache!: Table<QuoteData, string>;
-  fxCache!: Table<FxRateData, string>;
+  fxCache!: Table<FxRatesMap, string>;
+  tombstones!: Table<SyncTombstone, string>;
 
   constructor() {
     super('fundpilot_vault');
-    this.version(1).stores({
+    this.version(2).stores({
       meta: '&key',
       records: '&id, type, updatedAt',
-      quotesCache: '&ticker, timestamp',
-      fxCache: '&pair, timestamp',
+      fxCache: '&base, timestamp',
+      tombstones: '&id, type, deletedAt',
     });
   }
 }
@@ -43,7 +44,7 @@ export async function saveVaultMeta(meta: EncryptedVaultMeta): Promise<void> {
 // Complete wipe of all local records
 export async function wipeAllData(): Promise<void> {
   await db.records.clear();
-  await db.quotesCache.clear();
   await db.fxCache.clear();
   await db.meta.clear();
+  await db.tombstones.clear();
 }
