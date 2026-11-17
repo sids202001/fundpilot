@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
-import { useStore } from '@/lib/store';
+import React, { useState, useMemo, useEffect } from 'react';
+import { useStore, getLocalDate, getLocalMonth } from '@/lib/store';
 import { Expense, ExpenseItem, CategoryRule, CustomCategory } from '@/lib/types';
 import { STANDARD_CATEGORIES, categorizeMerchant } from '@/lib/aiCategorizer';
 import { parseVoiceExpense } from '@/lib/voice';
@@ -33,7 +33,13 @@ import {
   X,
 } from 'lucide-react';
 
-export function ExpenseModule({ filterCategory }: { filterCategory?: string | null }) {
+export function ExpenseModule({
+  filterCategory,
+  filterMonth,
+}: {
+  filterCategory?: string | null;
+  filterMonth?: string | null;
+}) {
   const {
     expenses,
     addExpense,
@@ -57,7 +63,16 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
   const [activeSubTab, setActiveSubTab] = useState<'list' | 'subscriptions' | 'budgets' | 'rules'>('list');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>(filterCategory || 'ALL');
+  const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>(filterMonth || 'ALL');
   const [selectedAccountFilter, setSelectedAccountFilter] = useState<string>('ALL');
+
+  useEffect(() => {
+    if (filterCategory) setSelectedCategoryFilter(filterCategory);
+  }, [filterCategory]);
+
+  useEffect(() => {
+    if (filterMonth) setSelectedMonthFilter(filterMonth);
+  }, [filterMonth]);
 
   // Modals
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
@@ -76,7 +91,7 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
   const [manualAmount, setManualAmount] = useState('');
   const [manualCurrency, setManualCurrency] = useState(displayCurrency || 'USD');
   const [manualCategory, setManualCategory] = useState('Groceries');
-  const [manualDate, setManualDate] = useState(new Date().toISOString().split('T')[0]);
+  const [manualDate, setManualDate] = useState(getLocalDate());
   const [manualNotes, setManualNotes] = useState('');
   const [manualAccountId, setManualAccountId] = useState<string>(accounts[0]?.id || '');
   const [manualEntryType, setManualEntryType] = useState<'debit' | 'credit'>('debit');
@@ -101,7 +116,7 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
   const [receiptTextPasted, setReceiptTextPasted] = useState('');
   const [isOcrProcessing, setIsOcrProcessing] = useState(false);
   const [ocrMerchant, setOcrMerchant] = useState('');
-  const [ocrDate, setOcrDate] = useState(new Date().toISOString().split('T')[0]);
+  const [ocrDate, setOcrDate] = useState(getLocalDate());
   const [ocrCurrency, setOcrCurrency] = useState(displayCurrency || 'USD');
   const [ocrAccountId, setOcrAccountId] = useState<string>(accounts[0]?.id || '');
   const [ocrTaxInput, setOcrTaxInput] = useState('0.00');
@@ -134,10 +149,10 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
   const anomalies = useMemo(() => detectAnomalies(expenses), [expenses]);
 
   // Current month vs previous month stats for Budgets
-  const currentMonthStr = new Date().toISOString().substring(0, 7);
+  const currentMonthStr = getLocalMonth();
   const prevDate = new Date();
   prevDate.setMonth(prevDate.getMonth() - 1);
-  const prevMonthStr = prevDate.toISOString().substring(0, 7);
+  const prevMonthStr = getLocalMonth(prevDate);
 
   const currentMonthExpenses = useMemo(() => expenses.filter((e) => e.date.startsWith(currentMonthStr)), [expenses, currentMonthStr]);
   const prevMonthExpenses = useMemo(() => expenses.filter((e) => e.date.startsWith(prevMonthStr)), [expenses, prevMonthStr]);
@@ -154,9 +169,11 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
       const matchAccount =
         selectedAccountFilter === 'ALL' ||
         (e.accountId && e.accountId === selectedAccountFilter);
-      return matchSearch && matchCategory && matchAccount;
+      const matchMonth =
+        selectedMonthFilter === 'ALL' || e.date.startsWith(selectedMonthFilter);
+      return matchSearch && matchCategory && matchAccount && matchMonth;
     });
-  }, [expenses, searchQuery, selectedCategoryFilter, selectedAccountFilter]);
+  }, [expenses, searchQuery, selectedCategoryFilter, selectedAccountFilter, selectedMonthFilter]);
 
   const totalMoneyOutCents = useMemo(() => {
     return displayedExpenses
@@ -305,7 +322,7 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
       amountCents: voiceParsed.amountCents,
       currency: displayCurrency || 'USD',
       category: voiceParsed.category,
-      date: new Date().toISOString().split('T')[0],
+      date: getLocalDate(),
       source: 'voice',
       confidence: voiceParsed.confidence,
       notes: `Voice input: "${voiceParsed.transcript}"`,
@@ -319,7 +336,7 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
   // Receipt OCR Handler (Fix 8: Editable fields + Reconciliation Gate)
   const populateOcrState = (parsed: ParsedReceipt) => {
     setOcrMerchant(parsed.merchant || 'Store');
-    setOcrDate(parsed.date || new Date().toISOString().split('T')[0]);
+    setOcrDate(parsed.date || getLocalDate());
     setOcrCurrency(parsed.currency || displayCurrency || 'USD');
     setOcrTaxInput((parsed.taxCents / 100).toFixed(2));
     setOcrTotalInput((parsed.totalCents / 100).toFixed(2));
@@ -590,6 +607,18 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
                 ))}
               </select>
             </div>
+            {selectedMonthFilter !== 'ALL' && (
+              <div className="flex items-center gap-1.5 rounded-lg border border-gold/30 bg-gold/10 px-2.5 py-1 text-xs text-gold-light">
+                <span>Month: <strong>{selectedMonthFilter}</strong></span>
+                <button
+                  onClick={() => setSelectedMonthFilter('ALL')}
+                  className="rounded p-0.5 text-gold-light hover:text-white"
+                  title="Clear Month Filter"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Transactions Table with Edit + Delete + Line Items */}

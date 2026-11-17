@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useStore } from '@/lib/store';
+import { useStore, getLocalDate } from '@/lib/store';
 import {
   Download,
   Upload,
@@ -37,7 +37,7 @@ export function BackupModal({ isOpen, onClose }: { isOpen: boolean; onClose: () 
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `fundpilot_encrypted_backup_${new Date().toISOString().split('T')[0]}.fundpilot`;
+      a.download = `fundpilot_encrypted_backup_${getLocalDate()}.fundpilot`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (err) {
@@ -84,7 +84,7 @@ export function BackupModal({ isOpen, onClose }: { isOpen: boolean; onClose: () 
       URL.revokeObjectURL(url);
     };
 
-    const dateStr = new Date().toISOString().split('T')[0];
+    const dateStr = getLocalDate();
     downloadBlob(expensesCSV, `fundpilot_expenses_${dateStr}.csv`);
     downloadBlob(fundsCSV, `fundpilot_funds_${dateStr}.csv`);
     downloadBlob(investmentsCSV, `fundpilot_investments_${dateStr}.csv`);

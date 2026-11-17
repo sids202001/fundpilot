@@ -17,7 +17,6 @@ import {
   VaultRecord,
   SyncTombstone,
   SyncReport,
-  AuditLogEntry,
 } from './types';
 import {
   generateSalt,
@@ -78,8 +77,6 @@ interface StoreContextType {
   rotateRecoveryKey: (newRecoveryWords: string[]) => Promise<boolean>;
   lockVault: () => void;
   autoLockMinutes: number;
-  auditLogs: AuditLogEntry[];
-  logAuditEvent: (action: AuditLogEntry['action'], targetType: string, details: string) => void;
 
   // Data Collections
   expenses: Expense[];
@@ -207,56 +204,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [fxRatesMap, setFxRatesMap] = useState<FxRatesMap | null>(null);
   const [isOffline, setIsOffline] = useState(false);
   const [migratedHoldingsCount, setMigratedHoldingsCount] = useState(0);
-
-  // Local Audit Log State (Fix 23)
-  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([
-    {
-      id: 'audit-init-1',
-      timestamp: Date.now() - 3600000 * 24 * 3,
-      action: 'create',
-      targetType: 'Account',
-      details: 'Created Primary Checking account ($5,000.00 USD)',
-    },
-    {
-      id: 'audit-init-2',
-      timestamp: Date.now() - 3600000 * 24 * 2,
-      action: 'transfer',
-      targetType: 'Sinking Fund',
-      details: 'Transferred $500.00 from Primary Checking to Emergency Fund',
-    },
-    {
-      id: 'audit-init-3',
-      timestamp: Date.now() - 3600000 * 24 * 1,
-      action: 'edit',
-      targetType: 'Investment',
-      details: 'Updated manual investment amount for 401(k) to $48,000.00',
-    },
-    {
-      id: 'audit-init-4',
-      timestamp: Date.now() - 3600000 * 12,
-      action: 'sync',
-      targetType: 'Sync Bundle',
-      details: 'Merged cross-device file sync bundle (2 added, 0 updated, 0 conflicts)',
-    },
-    {
-      id: 'audit-init-5',
-      timestamp: Date.now() - 3600000 * 2,
-      action: 'delete',
-      targetType: 'Custom Category',
-      details: 'Deleted custom category "Old Gym" (reclassified 1 expense to Miscellaneous)',
-    },
-  ]);
-
-  const logAuditEvent = useCallback((action: AuditLogEntry['action'], targetType: string, details: string) => {
-    const entry: AuditLogEntry = {
-      id: `audit-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-      timestamp: Date.now(),
-      action,
-      targetType,
-      details,
-    };
-    setAuditLogs((prev) => [entry, ...prev]);
-  }, []);
 
   const idleTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -537,7 +484,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           rule.updatedAt = Date.now();
           await persistRecord('fund_rule', rule.id, rule, key);
           hasChanges = true;
-          logAuditEvent('transfer', 'Fund Auto-Rule', skipNotice);
           console.warn(skipNotice);
           continue;
         }
@@ -884,7 +830,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       });
 
       setCryptoKey(newKey);
-      logAuditEvent('edit', 'Vault PIN', 'Master PIN changed and vault records re-encrypted');
       return true;
     } catch (err) {
       console.error('Failed to change PIN:', err);
@@ -1232,14 +1177,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
     await persistRecord('fund', fundId, updatedFund, cryptoKey);
     await persistRecord('fund_allocation', allocId, allocation, cryptoKey);
-
-    logAuditEvent(
-      'transfer',
-      'Sinking Fund',
-      type === 'deposit'
-        ? `Allocated ${formatMoney(amountCents, fund.currency)} to ${fund.name}${sourceAcc ? ` from ${sourceAcc.name}` : ''}`
-        : `Withdrew ${formatMoney(amountCents, fund.currency)} from ${fund.name}${sourceAcc ? ` to ${sourceAcc.name}` : ''}`
-    );
 
     return { success: true };
   };
@@ -1915,8 +1852,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         monthlyDebitSpentCents,
         monthlyCreditInflowCents,
         migratedHoldingsCount,
-        auditLogs,
-        logAuditEvent,
       }}
     >
       {children}

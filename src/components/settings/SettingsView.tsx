@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useStore } from '@/lib/store';
+import { useStore, getLocalDate } from '@/lib/store';
 import { CURRENCY_REGISTRY, formatMoney, convertCurrency } from '@/lib/currencies';
 import { generateRecoveryKey, selectVerificationIndices } from '@/lib/bip39';
 import {
@@ -22,8 +22,6 @@ import {
   Copy,
   Check,
   Wallet,
-  HardDrive,
-  ListChecks,
   Plus,
 } from 'lucide-react';
 
@@ -48,7 +46,6 @@ export function SettingsView() {
     investments,
     rates,
     fxRate,
-    auditLogs,
   } = useStore();
 
   // Change PIN State
@@ -79,32 +76,6 @@ export function SettingsView() {
   const [newAccType, setNewAccType] = useState<'bank' | 'credit' | 'cash'>('bank');
   const [newAccBalance, setNewAccBalance] = useState('');
   const [newAccCurrency, setNewAccCurrency] = useState('USD');
-
-  // Storage Meter State (Fix 16)
-  const [storageUsageBytes, setStorageUsageBytes] = useState<number>(0);
-  const [storageQuotaBytes, setStorageQuotaBytes] = useState<number>(0);
-
-  useEffect(() => {
-    async function checkStorage() {
-      if (typeof navigator !== 'undefined' && navigator.storage && navigator.storage.estimate) {
-        try {
-          const est = await navigator.storage.estimate();
-          setStorageUsageBytes(est.usage || 0);
-          setStorageQuotaBytes(est.quota || 0);
-        } catch {
-          // Fallback to estimated byte count
-          const estBytes = (expenses.length + funds.length + investments.length + accounts.length) * 450 + 4096;
-          setStorageUsageBytes(estBytes);
-          setStorageQuotaBytes(1024 * 1024 * 1024 * 10);
-        }
-      } else {
-        const estBytes = (expenses.length + funds.length + investments.length + accounts.length) * 450 + 4096;
-        setStorageUsageBytes(estBytes);
-        setStorageQuotaBytes(1024 * 1024 * 1024 * 10);
-      }
-    }
-    checkStorage();
-  }, [expenses.length, funds.length, investments.length, accounts.length]);
 
   const handleCreateAccount = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -186,7 +157,7 @@ export function SettingsView() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `fundpilot_sync_${new Date().toISOString().split('T')[0]}.fundpilot-sync`;
+      a.download = `fundpilot_sync_${getLocalDate()}.fundpilot-sync`;
       a.click();
       URL.revokeObjectURL(url);
       setSyncStatus('Encrypted sync file exported. Move it to your other device to merge.');
@@ -227,7 +198,7 @@ export function SettingsView() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `fundpilot_backup_${new Date().toISOString().split('T')[0]}.fundpilot`;
+      a.download = `fundpilot_backup_${getLocalDate()}.fundpilot`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
@@ -266,7 +237,7 @@ export function SettingsView() {
       URL.revokeObjectURL(url);
     };
 
-    const dateStr = new Date().toISOString().split('T')[0];
+    const dateStr = getLocalDate();
     download(expensesCSV, `fundpilot_expenses_${dateStr}.csv`);
     download(fundsCSV, `fundpilot_funds_${dateStr}.csv`);
     download(investmentsCSV, `fundpilot_investments_${dateStr}.csv`);
@@ -753,118 +724,7 @@ export function SettingsView() {
         )}
       </div>
 
-      {/* Section 6: Dexie Local Storage Meter (Fix 16) */}
-      <div className="rounded-2xl border border-[#1e222b] bg-[#111419]/90 p-6 backdrop-blur-md space-y-4">
-        <div className="flex items-center gap-2">
-          <HardDrive className="h-5 w-5 text-gold" />
-          <div>
-            <h3 className="text-sm font-semibold text-[#f5f3ef]">Dexie Local Storage Meter</h3>
-            <p className="text-xs text-[#9e9a93]">
-              Live breakdown of IndexedDB persistent quota and encrypted record density.
-            </p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-          <div className="rounded-xl border border-[#262930] bg-[#0b0d10] p-3">
-            <span className="text-[10px] text-[#9e9a93] uppercase tracking-wider">Used Storage</span>
-            <div className="mt-1 text-base font-bold text-gold-light">
-              {(storageUsageBytes / 1024).toFixed(1)} KB
-            </div>
-            <span className="text-[10px] text-[#9e9a93]">{(storageUsageBytes / (1024 * 1024)).toFixed(3)} MB</span>
-          </div>
-
-          <div className="rounded-xl border border-[#262930] bg-[#0b0d10] p-3">
-            <span className="text-[10px] text-[#9e9a93] uppercase tracking-wider">Browser Quota</span>
-            <div className="mt-1 text-base font-bold text-[#f5f3ef]">
-              {(storageQuotaBytes / (1024 * 1024 * 1024)).toFixed(1)} GB
-            </div>
-            <span className="text-[10px] text-[#9e9a93]">Available</span>
-          </div>
-
-          <div className="rounded-xl border border-[#262930] bg-[#0b0d10] p-3">
-            <span className="text-[10px] text-[#9e9a93] uppercase tracking-wider">Quota Used</span>
-            <div className="mt-1 text-base font-bold text-emerald-400">
-              {storageQuotaBytes > 0 ? ((storageUsageBytes / storageQuotaBytes) * 100).toFixed(4) : '0.0000'}%
-            </div>
-            <span className="text-[10px] text-[#9e9a93]">Optimal</span>
-          </div>
-
-          <div className="rounded-xl border border-[#262930] bg-[#0b0d10] p-3">
-            <span className="text-[10px] text-[#9e9a93] uppercase tracking-wider">Total Records</span>
-            <div className="mt-1 text-base font-bold text-[#f5f3ef]">
-              {expenses.length + funds.length + investments.length + accounts.length}
-            </div>
-            <span className="text-[10px] text-[#9e9a93]">Encrypted items</span>
-          </div>
-        </div>
-
-        {/* Progress Bar */}
-        <div className="space-y-1">
-          <div className="flex justify-between text-[11px] text-[#9e9a93]">
-            <span>IndexedDB Quota Utilization</span>
-            <span>&lt; 0.01% utilized</span>
-          </div>
-          <div className="h-2 w-full overflow-hidden rounded-full bg-[#1e222b]">
-            <div className="h-full bg-emerald-400 rounded-full" style={{ width: '0.1%' }} />
-          </div>
-        </div>
-
-        {/* Breakdown by Type */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] text-[#9e9a93] pt-1">
-          <div>Expenses: <strong className="text-[#f5f3ef]">{expenses.length}</strong></div>
-          <div>Sinking Funds: <strong className="text-[#f5f3ef]">{funds.length}</strong></div>
-          <div>Investments: <strong className="text-[#f5f3ef]">{investments.length}</strong></div>
-          <div>Accounts: <strong className="text-[#f5f3ef]">{accounts.length}</strong></div>
-        </div>
-      </div>
-
-      {/* Section 7: Local Audit Log (Fix 23) */}
-      <div className="rounded-2xl border border-[#1e222b] bg-[#111419]/90 p-6 backdrop-blur-md space-y-4">
-        <div className="flex items-center gap-2">
-          <ListChecks className="h-5 w-5 text-gold" />
-          <div>
-            <h3 className="text-sm font-semibold text-[#f5f3ef]">Local Audit Log</h3>
-            <p className="text-xs text-[#9e9a93]">
-              Chronological ledger of security and data mutations. Kept strictly on-device.
-            </p>
-          </div>
-        </div>
-
-        <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
-          {auditLogs.map((log) => {
-            const dateStr = new Date(log.timestamp).toLocaleString();
-            const badgeColor =
-              log.action === 'create'
-                ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20'
-                : log.action === 'edit'
-                ? 'bg-blue-500/10 text-blue-300 border-blue-500/20'
-                : log.action === 'delete'
-                ? 'bg-rose-500/10 text-rose-300 border-rose-500/20'
-                : log.action === 'transfer'
-                ? 'bg-purple-500/10 text-purple-300 border-purple-500/20'
-                : 'bg-gold/10 text-gold-light border-gold/20';
-
-            return (
-              <div
-                key={log.id}
-                className="flex flex-col sm:flex-row sm:items-center justify-between rounded-xl border border-[#262930] bg-[#0b0d10] p-3 text-xs gap-1.5"
-              >
-                <div className="flex items-center gap-2">
-                  <span className={`rounded-md border px-1.5 py-0.5 text-[10px] uppercase font-mono font-semibold ${badgeColor}`}>
-                    {log.action}
-                  </span>
-                  <span className="font-semibold text-[#f5f3ef]">{log.targetType}:</span>
-                  <span className="text-[#9e9a93]">{log.details}</span>
-                </div>
-                <span className="text-[10px] text-[#716c64] whitespace-nowrap">{dateStr}</span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Section 5: Backup, Restore & CSV */}
+      {/* Section 6: Backup, Restore & CSV */}
       <div className="rounded-2xl border border-[#1e222b] bg-[#111419]/90 p-6 backdrop-blur-md space-y-4">
         <h3 className="text-sm font-semibold text-[#f5f3ef]">Data Backup &amp; CSV Export</h3>
 

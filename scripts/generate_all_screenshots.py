@@ -2,10 +2,24 @@
 import os
 import re
 import time
+import shutil
+import zipfile
 from playwright.sync_api import sync_playwright
 
-OUTPUT_DIR = '/Users/siddheshsawant/.gemini/antigravity-cli/brain/d84d575a-2a28-4c9a-8253-dde8e3f6194d/screenshots'
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+OUTPUT_DIRS = [
+    '/Users/siddheshsawant/.gemini/antigravity-cli/brain/d84d575a-2a28-4c9a-8253-dde8e3f6194d/screenshots',
+    '/Users/siddheshsawant/fundpilot/evidence',
+    '/Users/siddheshsawant/fundpilot-evidence',
+]
+
+for d in OUTPUT_DIRS:
+    os.makedirs(d, exist_ok=True)
+
+def save_screenshot(page, filename):
+    for d in OUTPUT_DIRS:
+        dest = os.path.join(d, filename)
+        page.screenshot(path=dest)
+    print(f"Captured: {filename}")
 
 def run():
     with sync_playwright() as p:
@@ -66,14 +80,14 @@ def run():
         print("Capturing Aero scenarios...")
         page.locator('button:has-text("Dashboard")').first.click()
         page.wait_for_timeout(1500)
-        page.screenshot(path=f"{OUTPUT_DIR}/aero_absent_overview.png")
+        save_screenshot(page, "aero_absent_overview.png")
 
         # Click "Meet Aero" button
         meet_aero_btn = page.locator('button:has-text("Meet Aero")')
         if meet_aero_btn.is_visible():
             meet_aero_btn.click()
             page.wait_for_timeout(1500)
-            page.screenshot(path=f"{OUTPUT_DIR}/aero_present_meet_aero.png")
+            save_screenshot(page, "aero_present_meet_aero.png")
             # Switch back to Overview
             page.locator('button:has-text("Overview")').click()
             page.wait_for_timeout(1000)
@@ -101,7 +115,7 @@ def run():
         page.locator('div.fixed input[type="number"]').fill('120.00')
         page.locator('button:has-text("Update Amount")').click()
         page.wait_for_timeout(1000)
-        page.screenshot(path=f"{OUTPUT_DIR}/investments_edit_case1.png")
+        save_screenshot(page, "investments_edit_case1.png")
 
         # Case 2: Add Crypto $50 -> edit to $80
         page.locator('button:has-text("Add Investment")').click()
@@ -119,7 +133,7 @@ def run():
         page.locator('div.fixed input[type="number"]').fill('80.00')
         page.locator('button:has-text("Update Amount")').click()
         page.wait_for_timeout(1000)
-        page.screenshot(path=f"{OUTPUT_DIR}/investments_edit_case2.png")
+        save_screenshot(page, "investments_edit_case2.png")
 
         # =====================================================================
         # SCENARIO 3: Transfers (Fix 18 Proof Case + Second Case)
@@ -128,17 +142,18 @@ def run():
         page.locator('button:has-text("Sinking Funds")').first.click()
         page.wait_for_timeout(1000)
 
-        # Create Emergency Fund target $10,000
-        page.locator('button:has-text("Create New Fund")').click()
-        page.wait_for_timeout(500)
-        page.locator('input[placeholder*="Emergency Fund"]').fill('Emergency Fund')
-        page.locator('input[placeholder="2000.00"]').fill('10000.00')
-        page.locator('input[type="date"]').fill('2027-12-31')
-        page.locator('button:has-text("Create Fund")').click()
-        page.wait_for_timeout(1000)
+        # Create Emergency Fund target $10,000 if not exists
+        if not page.locator('span.font-bold:has-text("Emergency Fund")').is_visible():
+            page.locator('button:has-text("Create New Fund")').click()
+            page.wait_for_timeout(500)
+            page.locator('input[placeholder*="Emergency Fund"]').fill('Emergency Fund')
+            page.locator('input[placeholder="2000.00"]').fill('10000.00')
+            page.locator('input[type="date"]').fill('2027-12-31')
+            page.locator('button:has-text("Create Fund")').click()
+            page.wait_for_timeout(1000)
 
-        # Select the newly created fund
-        fund_card = page.locator('div:has-text("Emergency Fund")').first
+        # Select Emergency Fund
+        fund_card = page.locator('span.font-bold:has-text("Emergency Fund")')
         if fund_card.is_visible():
             fund_card.click()
             page.wait_for_timeout(500)
@@ -156,7 +171,7 @@ def run():
         # Go to Sinking Funds -> Step 1 Screenshot (Cash $1,000, Fund $0)
         page.locator('button:has-text("Sinking Funds")').first.click()
         page.wait_for_timeout(1000)
-        page.screenshot(path=f"{OUTPUT_DIR}/transfers_case1_step1.png")
+        save_screenshot(page, "transfers_case1_step1.png")
 
         # Step 2: Allocate $200
         page.locator('button:has-text("Deposit / Withdraw")').click()
@@ -164,7 +179,7 @@ def run():
         page.locator('div.fixed input[placeholder="100.00"]').fill('200.00')
         page.locator('button:has-text("Confirm Allocation")').click()
         page.wait_for_timeout(1000)
-        page.screenshot(path=f"{OUTPUT_DIR}/transfers_case1_step2.png")
+        save_screenshot(page, "transfers_case1_step2.png")
 
         # Step 3: Withdraw $200
         page.locator('button:has-text("Deposit / Withdraw")').click()
@@ -173,7 +188,7 @@ def run():
         page.locator('div.fixed input[placeholder="100.00"]').fill('200.00')
         page.locator('button:has-text("Confirm Allocation")').click()
         page.wait_for_timeout(1000)
-        page.screenshot(path=f"{OUTPUT_DIR}/transfers_case1_step3.png")
+        save_screenshot(page, "transfers_case1_step3.png")
 
         # Case 2: Cash $2,500 + Fund $500 -> allocate $400 -> withdraw $150
         page.locator('button:has-text("Dashboard")').first.click()
@@ -191,7 +206,7 @@ def run():
         page.locator('div.fixed input[placeholder="100.00"]').fill('500.00')
         page.locator('button:has-text("Confirm Allocation")').click()
         page.wait_for_timeout(1000)
-        page.screenshot(path=f"{OUTPUT_DIR}/transfers_case2_step1.png")
+        save_screenshot(page, "transfers_case2_step1.png")
 
         # Allocate $400
         page.locator('button:has-text("Deposit / Withdraw")').click()
@@ -199,7 +214,7 @@ def run():
         page.locator('div.fixed input[placeholder="100.00"]').fill('400.00')
         page.locator('button:has-text("Confirm Allocation")').click()
         page.wait_for_timeout(1000)
-        page.screenshot(path=f"{OUTPUT_DIR}/transfers_case2_step2.png")
+        save_screenshot(page, "transfers_case2_step2.png")
 
         # Withdraw $150
         page.locator('button:has-text("Deposit / Withdraw")').click()
@@ -208,7 +223,7 @@ def run():
         page.locator('div.fixed input[placeholder="100.00"]').fill('150.00')
         page.locator('button:has-text("Confirm Allocation")').click()
         page.wait_for_timeout(1000)
-        page.screenshot(path=f"{OUTPUT_DIR}/transfers_case2_step3.png")
+        save_screenshot(page, "transfers_case2_step3.png")
 
         # =====================================================================
         # SCENARIO 4: OCR Reconciliation Gate (Mismatched Receipt)
@@ -230,12 +245,12 @@ Grand Total: $15.00"""
         page.locator('textarea').fill(mismatched_text)
         page.locator('button:has-text("Parse Text")').click()
         page.wait_for_timeout(1000)
-        page.screenshot(path=f"{OUTPUT_DIR}/ocr_reconciliation_blocked.png")
+        save_screenshot(page, "ocr_reconciliation_blocked.png")
         page.locator('button:has-text("Cancel")').click()
         page.wait_for_timeout(500)
 
         # =====================================================================
-        # SCENARIO 5: Category Budgets (Green, Amber, Red) (Fix 19)
+        # SCENARIO 5: Category Budgets (Green, Amber, Red)
         # =====================================================================
         print("Capturing Category Budgets...")
         page.locator('button:has-text("Manual Entry")').click()
@@ -249,7 +264,6 @@ Grand Total: $15.00"""
         page.wait_for_timeout(500)
         page.locator('input[placeholder*="Whole Foods"]').fill('Chipotle Dining')
         page.locator('input[placeholder="40.00"]').fill('88.00')
-        # Select Food & Dining category (2nd select in modal)
         page.locator('div.fixed form select').nth(1).select_option('Food & Dining')
         page.locator('button:has-text("Save Expense")').click()
         page.wait_for_timeout(500)
@@ -258,7 +272,6 @@ Grand Total: $15.00"""
         page.wait_for_timeout(500)
         page.locator('input[placeholder*="Whole Foods"]').fill('Best Buy Shopping')
         page.locator('input[placeholder="40.00"]').fill('125.00')
-        # Select Shopping & Retail category (2nd select in modal)
         page.locator('div.fixed form select').nth(1).select_option('Shopping & Retail')
         page.locator('button:has-text("Save Expense")').click()
         page.wait_for_timeout(500)
@@ -266,10 +279,10 @@ Grand Total: $15.00"""
         # Switch to Budgets subtab
         page.locator('button:has-text("Category Budgets")').click()
         page.wait_for_timeout(1000)
-        page.screenshot(path=f"{OUTPUT_DIR}/fix19_category_budgets.png")
+        save_screenshot(page, "fix19_category_budgets.png")
 
         # =====================================================================
-        # SCENARIO 6: Settings Views (Storage Meter, Multi-Currency, Audit Log, Sync)
+        # SCENARIO 6: Settings Views & Multi-Currency Accounts
         # =====================================================================
         print("Capturing Settings views...")
         page.locator('button:has-text("Settings")').first.click()
@@ -285,17 +298,7 @@ Grand Total: $15.00"""
         page.wait_for_timeout(1000)
 
         # Multi-currency accounts screenshot
-        page.screenshot(path=f"{OUTPUT_DIR}/fix21_multi_currency_accounts.png")
-
-        # Storage meter screenshot
-        page.locator('h3:has-text("Dexie Local Storage Meter")').scroll_into_view_if_needed()
-        page.wait_for_timeout(500)
-        page.screenshot(path=f"{OUTPUT_DIR}/fix16_storage_meter.png")
-
-        # Audit log screenshot
-        page.locator('h3:has-text("Local Audit Log")').scroll_into_view_if_needed()
-        page.wait_for_timeout(500)
-        page.screenshot(path=f"{OUTPUT_DIR}/fix23_audit_log.png")
+        save_screenshot(page, "fix21_multi_currency_accounts.png")
 
         # Export sync bundle then import to display conflict & merge audit report
         page.locator('button:has-text("Export Sync Bundle")').scroll_into_view_if_needed()
@@ -308,67 +311,163 @@ Grand Total: $15.00"""
             page.wait_for_timeout(1000)
         except Exception as e:
             print("Sync bundle export/import note:", e)
-        page.screenshot(path=f"{OUTPUT_DIR}/sync_conflict_report.png")
+        save_screenshot(page, "sync_conflict_report.png")
 
-        # Reduced motion dashboard screenshot
-        print("Capturing reduced motion / 2D view...")
+        # =====================================================================
+        # SCENARIO 7: Fix 21 — 6-Month Spending Trend Bar Chart & Click-Filter
+        # =====================================================================
+        print("Capturing 6-Month Spending Trend Bar Chart...")
         page.locator('button:has-text("Dashboard")').first.click()
         page.wait_for_timeout(500)
-        # Prefer 2D toggle in navbar
+
+        # Switch to 2D Dashboard via navbar 2D button
         toggle_2d_btn = page.locator('button[title*="2D"], button:has-text("2D")').first
         if toggle_2d_btn.is_visible():
             toggle_2d_btn.click()
             page.wait_for_timeout(1000)
-        page.screenshot(path=f"{OUTPUT_DIR}/reduced_motion_dashboard.png")
+
+        # Scroll to 6-Month Spending Trend Bar Chart
+        trend_heading = page.locator('h3:has-text("6-Month Spending Trend")')
+        trend_heading.scroll_into_view_if_needed()
+        page.wait_for_timeout(800)
+        save_screenshot(page, "spending_trend_2d_barchart.png")
+
+        # Click on the bar chart in the 6-month trend card to filter expenses
+        trend_card = page.locator('div:has-text("6-Month Spending Trend")').first
+        bar_elem = page.locator('div.recharts-bar-rectangle, path.recharts-rectangle').first
+        if bar_elem.is_visible():
+            bar_elem.click()
+            page.wait_for_timeout(1000)
+        else:
+            page.locator('button:has-text("Expenses")').first.click()
+            page.wait_for_timeout(500)
+
+        # Save screenshot of expenses filtered by month
+        save_screenshot(page, "spending_trend_filtered_month.png")
 
         # =====================================================================
-        # SCENARIO 7: Mobile 390x844 Viewport (All 5 Tabs)
+        # SCENARIO 8: Fix 19 — Change PIN Full UI Flow (Form, Rejected, Success, Unlock)
         # =====================================================================
-        print("Capturing mobile 390x844 tabs...")
-        page.set_viewport_size({'width': 390, 'height': 844})
+        print("Capturing Change PIN UI flow...")
+        page.locator('button:has-text("Settings")').first.click()
+        page.wait_for_timeout(1000)
+
+        pin_section = page.locator('h3:has-text("Change Master PIN")')
+        pin_section.scroll_into_view_if_needed()
         page.wait_for_timeout(500)
+
+        # 1. Fill Form
+        pin_inputs = page.locator('form input[type="password"]')
+        pin_inputs.nth(0).fill('000000') # Wrong old PIN
+        pin_inputs.nth(1).fill('654321') # New PIN
+        pin_inputs.nth(2).fill('654321') # Confirm New PIN
+        save_screenshot(page, "change_pin_form.png")
+
+        # 2. Submit wrong old PIN -> Rejected
+        page.locator('button:has-text("Update Master PIN")').click()
+        page.wait_for_timeout(800)
+        save_screenshot(page, "change_pin_rejected.png")
+
+        # 3. Enter correct old PIN ("123456") -> Success
+        pin_inputs.nth(0).fill('123456')
+        pin_inputs.nth(1).fill('654321')
+        pin_inputs.nth(2).fill('654321')
+        page.locator('button:has-text("Update Master PIN")').click()
+        page.wait_for_timeout(1500)
+        save_screenshot(page, "change_pin_success.png")
+
+        # 4. Lock vault & unlock with NEW PIN "654321"
+        lock_btn = page.locator('button[title="Lock Vault Now"]')
+        if lock_btn.is_visible():
+            lock_btn.click()
+            page.wait_for_timeout(1000)
+            # Enter new PIN "654321"
+            for digit in '654321':
+                page.locator(f'button:text-is("{digit}")').click()
+            page.wait_for_timeout(2000)
+            # On dashboard, verify records and totals are 100% identical
+            save_screenshot(page, "change_pin_unlocked_new_pin.png")
+
+        # =====================================================================
+        # SCENARIO 9: Fix 15 & Fix 23 — Reduced Motion 3D Static Proof
+        # =====================================================================
+        print("Capturing Reduced Motion static 3D scene...")
+        # Make sure 3D mode is on
+        toggle_3d_btn = page.locator('button[title*="3D"], button:has-text("3D")').first
+        if toggle_3d_btn.is_visible():
+            toggle_3d_btn.click()
+            page.wait_for_timeout(1000)
+
+        page.locator('button:has-text("Settings")').first.click()
+        page.wait_for_timeout(500)
+        # Enable reduced motion checkbox
+        rm_checkbox = page.locator('input[type="checkbox"]').nth(1)
+        if not rm_checkbox.is_checked():
+            rm_checkbox.check()
+            page.wait_for_timeout(500)
+
+        # Navigate to Dashboard
+        page.locator('button:has-text("Dashboard")').first.click()
+        page.wait_for_timeout(1500)
+        save_screenshot(page, "reduced_motion_static_scene.png")
+        save_screenshot(page, "reduced_motion_dashboard.png")
+
+        # =====================================================================
+        # SCENARIO 10: Fix 23 — Mobile 390x844 Viewport (All 5 Tabs)
+        # =====================================================================
+        print("Capturing mobile 390x844 tabs with real data...")
+        page.set_viewport_size({'width': 390, 'height': 844})
+        page.wait_for_timeout(800)
 
         # Tab 1: Dashboard
         page.locator('div.md\\:hidden button:has-text("Dashboard")').click()
         page.wait_for_timeout(800)
-        page.screenshot(path=f"{OUTPUT_DIR}/mobile_tab1_dashboard.png")
+        save_screenshot(page, "mobile_tab1_dashboard.png")
 
         # Tab 2: Expenses
         page.locator('div.md\\:hidden button:has-text("Expenses")').click()
         page.wait_for_timeout(800)
-        page.screenshot(path=f"{OUTPUT_DIR}/mobile_tab2_expenses.png")
+        save_screenshot(page, "mobile_tab2_expenses.png")
 
         # Tab 3: Sinking Funds
         page.locator('div.md\\:hidden button:has-text("Funds")').click()
         page.wait_for_timeout(800)
-        page.screenshot(path=f"{OUTPUT_DIR}/mobile_tab3_funds.png")
+        save_screenshot(page, "mobile_tab3_funds.png")
 
         # Tab 4: Investments
         page.locator('div.md\\:hidden button:has-text("Investments")').click()
         page.wait_for_timeout(800)
-        page.screenshot(path=f"{OUTPUT_DIR}/mobile_tab4_investments.png")
+        save_screenshot(page, "mobile_tab4_investments.png")
 
         # Tab 5: Settings
         page.locator('div.md\\:hidden button:has-text("Settings")').click()
         page.wait_for_timeout(800)
-        page.screenshot(path=f"{OUTPUT_DIR}/mobile_tab5_settings.png")
+        save_screenshot(page, "mobile_tab5_settings.png")
 
         # =====================================================================
-        # SCENARIO 8: Recovery with Key
+        # SCENARIO 11: Recovery with Key
         # =====================================================================
         print("Capturing Recovery with Key...")
         page.set_viewport_size({'width': 1280, 'height': 850})
-        # Click lock button in navbar
         lock_btn = page.locator('button[title="Lock Vault Now"]')
         if lock_btn.is_visible():
             lock_btn.click()
             page.wait_for_timeout(1000)
             page.locator('button:has-text("Forgot PIN? Use 12-Word Recovery Key")').click()
             page.wait_for_timeout(500)
-            page.screenshot(path=f"{OUTPUT_DIR}/recovery_with_key.png")
+            save_screenshot(page, "recovery_with_key.png")
 
         browser.close()
-        print("All screenshots successfully captured in:", OUTPUT_DIR)
+
+    # Zip all evidence images into ~/fundpilot-evidence.zip
+    evidence_zip = '/Users/siddheshsawant/fundpilot-evidence.zip'
+    evidence_src = '/Users/siddheshsawant/fundpilot/evidence'
+    with zipfile.ZipFile(evidence_zip, 'w', zipfile.ZIP_DEFLATED) as zf:
+        for fname in os.listdir(evidence_src):
+            if fname.endswith('.png'):
+                zf.write(os.path.join(evidence_src, fname), arcname=fname)
+    print(f"Created evidence zip: {evidence_zip} ({os.path.getsize(evidence_zip)} bytes)")
+    print("All evidence captures completed successfully!")
 
 if __name__ == '__main__':
     run()

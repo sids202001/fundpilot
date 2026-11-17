@@ -91,14 +91,6 @@ export interface FundAutoRule {
   deviceId?: string;
 }
 
-export interface AuditLogEntry {
-  id: string;
-  timestamp: number;
-  action: 'create' | 'edit' | 'delete' | 'transfer' | 'sync';
-  targetType: string;
-  details: string;
-}
-
 export interface CustomCategory {
   id: string;
   name: string;

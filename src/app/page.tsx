@@ -32,53 +32,11 @@ export default function Home() {
     }
   }, []);
 
-  // Global Keyboard Shortcuts (Fix 13)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if user is typing in an input, textarea, or select
-      const activeTag = (document.activeElement?.tagName || '').toLowerCase();
-      if (activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select') {
-        return;
-      }
-      if (isLocked) return;
-
-      switch (e.key.toLowerCase()) {
-        case '1':
-        case 'd':
-          setActiveTab('dashboard');
-          break;
-        case '2':
-        case 'e':
-          setActiveTab('expenses');
-          break;
-        case '3':
-        case 'f':
-          setActiveTab('funds');
-          break;
-        case '4':
-        case 'i':
-          setActiveTab('investments');
-          break;
-        case '5':
-        case 's':
-          setActiveTab('settings');
-          break;
-        case 'escape':
-          setDrillCategory(null);
-          setDrillFundId(null);
-          setDrillInvestmentId(null);
-          break;
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isLocked]);
-
   // Selected drill-down states from 3D/2D clicks
   const [drillCategory, setDrillCategory] = useState<string | null>(null);
   const [drillFundId, setDrillFundId] = useState<string | null>(null);
   const [drillInvestmentId, setDrillInvestmentId] = useState<string | null>(null);
+  const [drillMonth, setDrillMonth] = useState<string | null>(null);
 
   if (!isVaultReady) {
     return (
@@ -111,6 +69,7 @@ export default function Home() {
   };
 
   const handleSelectMonthFilter = (monthStr: string) => {
+    setDrillMonth(monthStr);
     setActiveTab('expenses');
   };
 
@@ -150,7 +109,7 @@ export default function Home() {
 
         {/* Tab 2: Expense Tracker */}
         {activeTab === 'expenses' && (
-          <ExpenseModule filterCategory={drillCategory} />
+          <ExpenseModule filterCategory={drillCategory} filterMonth={drillMonth} />
         )}
 
         {/* Tab 3: Sinking Funds */}

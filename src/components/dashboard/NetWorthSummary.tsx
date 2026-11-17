@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useStore } from '@/lib/store';
+import { useStore, getLocalDate, getLocalMonth } from '@/lib/store';
 import { formatMoney } from '@/lib/currencies';
 import { ArrowUpRight, ArrowDownRight, Edit3, Check, Calculator } from 'lucide-react';
 
@@ -30,7 +30,7 @@ export function NetWorthSummary() {
   const [incomeInput, setIncomeInput] = useState(((settings.monthlyIncomeCents || 0) / 100).toString());
   const [fixedBillsInput, setFixedBillsInput] = useState(((settings.fixedBillsCents || 0) / 100).toString());
 
-  const currentMonth = new Date().toISOString().substring(0, 7);
+  const currentMonth = getLocalMonth();
 
   // Spend this month (debit expenses only)
   const spentThisMonthCents = expenses
@@ -61,10 +61,10 @@ export function NetWorthSummary() {
     const billsCents = Math.round(parseFloat(fixedBillsInput || '0') * 100);
 
     if (primaryBank && !isNaN(cashCents)) {
-      updateAccount(primaryBank.id, { balanceCents: cashCents, lastEditedDate: new Date().toISOString().split('T')[0] });
+      updateAccount(primaryBank.id, { balanceCents: cashCents, lastEditedDate: getLocalDate() });
     }
     if (primaryCredit && !isNaN(creditCents)) {
-      updateAccount(primaryCredit.id, { balanceCents: creditCents, lastEditedDate: new Date().toISOString().split('T')[0] });
+      updateAccount(primaryCredit.id, { balanceCents: creditCents, lastEditedDate: getLocalDate() });
     }
 
     updateSettings({

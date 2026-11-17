@@ -4,7 +4,7 @@ import React, { useRef, useState, useMemo } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Text } from '@react-three/drei';
 import * as THREE from 'three';
-import { useStore } from '@/lib/store';
+import { useStore, getLocalMonth } from '@/lib/store';
 import { formatMoney, convertCurrency } from '@/lib/currencies';
 import {
   Compass,
@@ -679,7 +679,7 @@ export function FinanceScene({
     if (safeToSpendMonthCents < 20000 || totalCreditOwedCents > totalBankCashCents) {
       return 'caution';
     }
-    const currentMonth = new Date().toISOString().substring(0, 7);
+    const currentMonth = getLocalMonth();
     const spentThisMonth = expenses
       .filter((e) => e.date.startsWith(currentMonth) && (e.entryType || 'debit') === 'debit')
       .reduce((s, e) => s + e.amountCents, 0);
@@ -705,7 +705,7 @@ export function FinanceScene({
   // Category aggregates for Expense Skyline
   const categorySpendMap = useMemo(() => {
     const map = new Map<string, number>();
-    const currentMonth = new Date().toISOString().substring(0, 7);
+    const currentMonth = getLocalMonth();
     expenses
       .filter((e) => e.date.startsWith(currentMonth) && (e.entryType || 'debit') === 'debit')
       .forEach((e) => {
