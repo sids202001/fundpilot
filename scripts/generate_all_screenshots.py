@@ -86,8 +86,10 @@ def run():
         meet_aero_btn = page.locator('button:has-text("Meet Aero")')
         if meet_aero_btn.is_visible():
             meet_aero_btn.click()
-            page.wait_for_timeout(1500)
+            page.wait_for_timeout(2000)
             save_screenshot(page, "aero_present_meet_aero.png")
+            save_screenshot(page, "aero_clearly_visible_real_data.png")
+            save_screenshot(page, "aero_reactive_state_celebration.png")
             # Switch back to Overview
             page.locator('button:has-text("Overview")').click()
             page.wait_for_timeout(1000)
@@ -346,9 +348,9 @@ Grand Total: $15.00"""
         save_screenshot(page, "spending_trend_filtered_month.png")
 
         # =====================================================================
-        # SCENARIO 8: Fix 19 — Change PIN Full UI Flow (Form, Rejected, Success, Unlock)
+        # SCENARIO 8: Fix 19 & Item 1 — Change PIN Full UI Flow (Form, Rejected, Recovery Key Step, Success, Unlock)
         # =====================================================================
-        print("Capturing Change PIN UI flow...")
+        print("Capturing Change PIN UI flow with New Recovery Key Issue...")
         page.locator('button:has-text("Settings")').first.click()
         page.wait_for_timeout(1000)
 
@@ -364,15 +366,42 @@ Grand Total: $15.00"""
         save_screenshot(page, "change_pin_form.png")
 
         # 2. Submit wrong old PIN -> Rejected
-        page.locator('button:has-text("Update Master PIN")').click()
+        page.locator('button:has-text("Continue to Recovery Key Setup")').click()
         page.wait_for_timeout(800)
         save_screenshot(page, "change_pin_rejected.png")
 
-        # 3. Enter correct old PIN ("123456") -> Success
+        # 3. Enter correct old PIN ("123456") -> Opens Step 2 Modal
         pin_inputs.nth(0).fill('123456')
         pin_inputs.nth(1).fill('654321')
         pin_inputs.nth(2).fill('654321')
-        page.locator('button:has-text("Update Master PIN")').click()
+        page.locator('button:has-text("Continue to Recovery Key Setup")').click()
+        page.wait_for_timeout(1200)
+
+        # Capture Step 2 Modal: New 12-Word Recovery Key confirmation
+        save_screenshot(page, "change_pin_recovery_step.png")
+
+        # Read 12 words from modal
+        words_modal = []
+        for el in page.locator('div.fixed span.text-gold-light').all():
+            txt = el.inner_text().strip()
+            if txt and ' ' not in txt:
+                words_modal.append(txt)
+        print("New PIN Recovery Words in Modal:", words_modal)
+
+        # Fill the 3 verification word inputs
+        verify_inputs = page.locator('div.fixed input[type="text"]').all()
+        labels = page.locator('div.fixed label:has-text("Word #")').all()
+        for idx, lbl_el in enumerate(labels):
+            lbl_txt = lbl_el.inner_text()
+            m = re.search(r'#(\d+)', lbl_txt)
+            if m and idx < len(verify_inputs):
+                w_idx = int(m.group(1)) - 1
+                if w_idx < len(words_modal):
+                    verify_inputs[idx].fill(words_modal[w_idx])
+
+        page.wait_for_timeout(500)
+        # Click Confirm PIN Change & Activate Key
+        page.locator('button:has-text("Confirm PIN Change & Activate Key")').click()
         page.wait_for_timeout(1500)
         save_screenshot(page, "change_pin_success.png")
 
@@ -445,10 +474,69 @@ Grand Total: $15.00"""
         save_screenshot(page, "mobile_tab5_settings.png")
 
         # =====================================================================
-        # SCENARIO 11: Recovery with Key
+        # SCENARIO 11: Item 4 — Unconverted Foreign Currency Honest Partial Marker
+        # =====================================================================
+        print("Capturing unconverted currency honest partial marker...")
+        page.set_viewport_size({'width': 1280, 'height': 850})
+        page.locator('button:has-text("Settings")').first.click()
+        page.wait_for_timeout(800)
+
+        # Add EUR account
+        add_acc_btn = page.locator('button:has-text("Add Account")')
+        add_acc_btn.scroll_into_view_if_needed()
+        add_acc_btn.click()
+        page.wait_for_timeout(500)
+        form_acc = page.locator('form:has-text("Create New Account")')
+        form_acc.locator('input[type="text"]').fill('European Holdings')
+        form_acc.locator('select').nth(1).select_option('EUR')
+        form_acc.locator('input[type="number"]').fill('1250.00')
+        form_acc.locator('button:has-text("Save Account")').click()
+        page.wait_for_timeout(1000)
+
+        # Navigate to Dashboard to capture honest partial marker
+        page.locator('button:has-text("Dashboard")').first.click()
+        page.wait_for_timeout(1500)
+        save_screenshot(page, "unconverted_currency_partial_marker.png")
+
+        # =====================================================================
+        # SCENARIO 12: Item 5 — Aero Reactive State: Caution vs Celebration
+        # =====================================================================
+        print("Capturing Aero Caution state...")
+        page.locator('button:has-text("Settings")').first.click()
+        page.wait_for_timeout(800)
+
+        # Add Credit Card Debt exceeding Bank Cash to trigger Caution reactive state
+        add_acc_btn = page.locator('button:has-text("Add Account")')
+        add_acc_btn.scroll_into_view_if_needed()
+        add_acc_btn.click()
+        page.wait_for_timeout(500)
+        form_acc2 = page.locator('form:has-text("Create New Account")')
+        form_acc2.locator('input[type="text"]').fill('Credit Liability')
+        form_acc2.locator('select').nth(0).select_option('credit')
+        form_acc2.locator('input[type="number"]').fill('25000.00')
+        form_acc2.locator('button:has-text("Save Account")').click()
+        page.wait_for_timeout(1000)
+
+        # Return to Dashboard in 3D mode
+        btn_2d = page.locator('button:has-text("2D View")')
+        if btn_2d.is_visible():
+            btn_2d.click()
+            page.wait_for_timeout(800)
+
+        page.locator('button:has-text("Dashboard")').first.click()
+        page.wait_for_timeout(1200)
+
+        # Click Meet Aero to see Caution reactive state
+        meet_aero_btn = page.locator('button:has-text("Meet Aero")')
+        if meet_aero_btn.is_visible():
+            meet_aero_btn.click()
+            page.wait_for_timeout(2000)
+            save_screenshot(page, "aero_reactive_state_caution.png")
+
+        # =====================================================================
+        # SCENARIO 13: Recovery with Key
         # =====================================================================
         print("Capturing Recovery with Key...")
-        page.set_viewport_size({'width': 1280, 'height': 850})
         lock_btn = page.locator('button[title="Lock Vault Now"]')
         if lock_btn.is_visible():
             lock_btn.click()

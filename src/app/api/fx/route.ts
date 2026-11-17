@@ -14,9 +14,13 @@ export async function GET(request: NextRequest) {
     if (res.ok) {
       const data = await res.json();
       if (data && data.rates && typeof data.rates === 'object') {
-        const asOfDate = data.time_last_update_utc
-          ? new Date(data.time_last_update_utc).toISOString().split('T')[0]
-          : '2026-11-15';
+        let asOfDate: string | null = null;
+        if (data.time_last_update_utc) {
+          const parsed = new Date(data.time_last_update_utc);
+          if (!isNaN(parsed.getTime())) {
+            asOfDate = parsed.toISOString().split('T')[0];
+          }
+        }
 
         return NextResponse.json({
           base: 'USD',

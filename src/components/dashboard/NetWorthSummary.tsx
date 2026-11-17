@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useStore, getLocalDate, getLocalMonth } from '@/lib/store';
 import { formatMoney } from '@/lib/currencies';
-import { ArrowUpRight, ArrowDownRight, Edit3, Check, Calculator } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, Edit3, Check, Calculator, AlertTriangle } from 'lucide-react';
 
 export function NetWorthSummary() {
   const {
@@ -13,6 +13,12 @@ export function NetWorthSummary() {
     totalInvestmentsCents,
     totalCreditOwedCents,
     safeToSpendMonthCents,
+    netWorthUnconverted,
+    bankCashUnconverted,
+    fundsUnconverted,
+    investmentsUnconverted,
+    creditOwedUnconverted,
+    safeToSpendUnconverted,
     settings,
     updateSettings,
     accounts,
@@ -98,17 +104,27 @@ export function NetWorthSummary() {
               <Edit3 className="h-4 w-4" />
             </button>
           </div>
-          <div className="mt-3 text-3xl font-extrabold tracking-tight text-[#f5f3ef]">
-            {formatMoney(totalNetWorthCents, displayCurrency || 'USD')}
+          <div className="mt-3 flex items-baseline gap-2">
+            <span className="text-3xl font-extrabold tracking-tight text-[#f5f3ef]">
+              {formatMoney(totalNetWorthCents, displayCurrency || 'USD')}
+            </span>
+            {netWorthUnconverted.length > 0 && (
+              <span
+                className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-400 border border-amber-500/30"
+                title={`FX rates unavailable for: ${netWorthUnconverted.join(', ')}. Foreign amounts excluded from total to prevent silent mixing.`}
+              >
+                * Partial ({netWorthUnconverted.join(', ')})
+              </span>
+            )}
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-1.5 text-[11px] text-[#9e9a93]">
-            <span>Cash: <strong className="text-[#e5c07b]">{formatMoney(totalBankCashCents, displayCurrency || 'USD')}</strong></span>
+            <span>Cash: <strong className="text-[#e5c07b]">{formatMoney(totalBankCashCents, displayCurrency || 'USD')}{bankCashUnconverted.length > 0 ? '*' : ''}</strong></span>
             <span className="text-[#3a3f4d]">•</span>
-            <span>Funds: <strong className="text-[#d4af37]">{formatMoney(totalFundsCents, displayCurrency || 'USD')}</strong></span>
+            <span>Funds: <strong className="text-[#d4af37]">{formatMoney(totalFundsCents, displayCurrency || 'USD')}{fundsUnconverted.length > 0 ? '*' : ''}</strong></span>
             <span className="text-[#3a3f4d]">•</span>
-            <span>Inv: <strong className="text-gain">{formatMoney(totalInvestmentsCents, displayCurrency || 'USD')}</strong></span>
+            <span>Inv: <strong className="text-gain">{formatMoney(totalInvestmentsCents, displayCurrency || 'USD')}{investmentsUnconverted.length > 0 ? '*' : ''}</strong></span>
             <span className="text-[#3a3f4d]">•</span>
-            <span>Credit: <strong className="text-loss">-{formatMoney(totalCreditOwedCents, displayCurrency || 'USD')}</strong></span>
+            <span>Credit: <strong className="text-loss">-{formatMoney(totalCreditOwedCents, displayCurrency || 'USD')}{creditOwedUnconverted.length > 0 ? '*' : ''}</strong></span>
           </div>
           <div className="absolute right-0 top-0 h-1 w-full bg-gradient-to-r from-[#d4af37] via-[#f3d99b] to-[#b8860b]" />
         </div>
@@ -121,11 +137,23 @@ export function NetWorthSummary() {
               Discretionary
             </span>
           </div>
-          <div className="mt-3 text-3xl font-extrabold tracking-tight text-[#4ade80]">
-            {formatMoney(safeToSpendMonthCents, displayCurrency || 'USD')}
+          <div className="mt-3 flex items-baseline gap-2">
+            <span className="text-3xl font-extrabold tracking-tight text-[#4ade80]">
+              {formatMoney(safeToSpendMonthCents, displayCurrency || 'USD')}
+            </span>
+            {safeToSpendUnconverted.length > 0 && (
+              <span
+                className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-400 border border-amber-500/30"
+                title={`FX rates unavailable for: ${safeToSpendUnconverted.join(', ')}`}
+              >
+                * Partial
+              </span>
+            )}
           </div>
           <p className="mt-4 text-[11px] text-[#9e9a93]">
-            Income − Fixed bills − Sinking deposits − Debit spent
+            {safeToSpendUnconverted.length > 0
+              ? `* Partial: rates unavailable for ${safeToSpendUnconverted.join(', ')}`
+              : 'Income − Fixed bills − Sinking deposits − Debit spent'}
           </p>
           <div className="absolute right-0 top-0 h-1 w-full bg-[#22c55e]" />
         </div>
@@ -166,6 +194,17 @@ export function NetWorthSummary() {
           <div className="absolute right-0 top-0 h-1 w-full bg-[#d4af37]" />
         </div>
       </div>
+
+      {/* Honest Multi-Currency Partial Marker Banner (Item 4) */}
+      {netWorthUnconverted.length > 0 && (
+        <div className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-xs text-amber-300 backdrop-blur-sm">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" />
+          <span>
+            <strong>Partial Multi-Currency Totals:</strong> FX exchange rates are currently unavailable for{' '}
+            <strong>{netWorthUnconverted.join(', ')}</strong>. Unconverted foreign-currency amounts are honestly excluded from totals to avoid silent 1:1 mixing.
+          </span>
+        </div>
+      )}
 
       {/* 4-Bucket Exact Mathematical Reconciliation Strip */}
       <div className="rounded-xl border border-[#1e222b] bg-[#111419]/90 px-4 py-2.5 backdrop-blur-sm text-[11px] text-[#9e9a93] flex flex-wrap items-center justify-between gap-3">

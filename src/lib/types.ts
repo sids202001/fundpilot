@@ -130,7 +130,7 @@ export interface BillReminder {
 export interface FxRatesMap {
   base: string; // "USD"
   rates: Record<string, number>;
-  asOfDate: string;
+  asOfDate: string | null;
   timestamp: number;
 }
 

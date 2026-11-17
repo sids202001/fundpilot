@@ -4,10 +4,13 @@ import React, { useState, useEffect } from 'react';
 import { useStore, getLocalDate } from '@/lib/store';
 import { CURRENCY_REGISTRY, formatMoney, convertCurrency } from '@/lib/currencies';
 import { generateRecoveryKey, selectVerificationIndices } from '@/lib/bip39';
+import { getVaultMeta } from '@/lib/db';
+import { verifyPinAndDeriveKey } from '@/lib/crypto';
 import {
   Settings,
   KeyRound,
   Shield,
+  ShieldAlert,
   Clock,
   Coins,
   Eye,
@@ -48,12 +51,17 @@ export function SettingsView() {
     fxRate,
   } = useStore();
 
-  // Change PIN State
+  // Change PIN State (Item 1: Mandatory New Recovery Key Issue)
   const [oldPin, setOldPin] = useState('');
   const [newPin, setNewPin] = useState('');
   const [confirmNewPin, setConfirmNewPin] = useState('');
   const [pinChangeMsg, setPinChangeMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isChangingPin, setIsChangingPin] = useState(false);
+  const [isPinRecoveryModalOpen, setIsPinRecoveryModalOpen] = useState(false);
+  const [pinRecoveryWords, setPinRecoveryWords] = useState<string[]>([]);
+  const [pinVerifyIndices, setPinVerifyIndices] = useState<number[]>([]);
+  const [pinVerifyInputs, setPinVerifyInputs] = useState<Record<number, string>>({});
+  const [copiedPinWords, setCopiedPinWords] = useState(false);
 
   // Recovery Key Rotation State
   const [isRotatingKey, setIsRotatingKey] = useState(false);
@@ -88,11 +96,15 @@ export function SettingsView() {
     setIsAddAccountOpen(false);
   };
 
-  // Handle Change PIN Submit
+  // Handle Change PIN Submit (Item 1: Generates new 12-word recovery key)
   const handleChangePin = async (e: React.FormEvent) => {
     e.preventDefault();
     setPinChangeMsg(null);
 
+    if (oldPin.length < 4 || oldPin.length > 8) {
+      setPinChangeMsg({ type: 'error', text: 'Current PIN must be 4 to 8 digits.' });
+      return;
+    }
     if (newPin.length < 4 || newPin.length > 8) {
       setPinChangeMsg({ type: 'error', text: 'New PIN must be 4 to 8 digits.' });
       return;
@@ -102,17 +114,49 @@ export function SettingsView() {
       return;
     }
 
+    // Verify old PIN before showing new recovery key
     setIsChangingPin(true);
-    const ok = await changePin(oldPin, newPin);
+    const meta = await getVaultMeta();
+    if (!meta) {
+      setIsChangingPin(false);
+      setPinChangeMsg({ type: 'error', text: 'Vault metadata not found.' });
+      return;
+    }
+    const testKey = await verifyPinAndDeriveKey(oldPin, meta.salt, meta.verifier, meta.verifierIv);
+    setIsChangingPin(false);
+    if (!testKey) {
+      setPinChangeMsg({ type: 'error', text: 'Current PIN is incorrect.' });
+      return;
+    }
+
+    // Old PIN is verified! Now generate NEW 12-word recovery key
+    const words = generateRecoveryKey();
+    const indices = selectVerificationIndices();
+    setPinRecoveryWords(words);
+    setPinVerifyIndices(indices);
+    setPinVerifyInputs({});
+    setCopiedPinWords(false);
+    setIsPinRecoveryModalOpen(true);
+  };
+
+  const handleConfirmPinChangeWithKey = async () => {
+    setIsChangingPin(true);
+    const ok = await changePin(oldPin, newPin, pinRecoveryWords);
     setIsChangingPin(false);
 
     if (ok) {
-      setPinChangeMsg({ type: 'success', text: 'Master PIN changed successfully. All records re-encrypted.' });
+      setIsPinRecoveryModalOpen(false);
+      setPinChangeMsg({
+        type: 'success',
+        text: 'Master PIN changed successfully and new 12-word recovery key activated. Your old recovery key is now permanently invalidated.',
+      });
       setOldPin('');
       setNewPin('');
       setConfirmNewPin('');
+      setPinRecoveryWords([]);
+      setPinVerifyInputs({});
     } else {
-      setPinChangeMsg({ type: 'error', text: 'Incorrect current PIN or re-encryption failure.' });
+      setPinChangeMsg({ type: 'error', text: 'PIN change failed during re-encryption.' });
     }
   };
 
@@ -267,15 +311,24 @@ export function SettingsView() {
         </p>
       </div>
 
-      {/* Section 1: Security & Master PIN (Fix 19) */}
+      {/* Section 1: Security & Master PIN (Fix 19 & Item 1) */}
       <div className="rounded-2xl border border-[#1e222b] bg-[#111419]/90 p-6 backdrop-blur-md">
-        <div className="flex items-center gap-2 mb-4">
+        <div className="flex items-center gap-2 mb-2">
           <KeyRound className="h-5 w-5 text-gold" />
           <h3 className="text-sm font-semibold text-[#f5f3ef]">Change Master PIN</h3>
         </div>
-        <p className="text-xs text-[#9e9a93] mb-4">
+        <p className="text-xs text-[#9e9a93] mb-3">
           Re-encrypts all local records under your new cryptographic key. Your old PIN is verified first.
         </p>
+
+        {/* Security Rule Statement */}
+        <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-300 flex items-start gap-2.5">
+          <ShieldAlert className="h-4 w-4 shrink-0 text-amber-400 mt-0.5" />
+          <div>
+            <strong className="text-amber-400 font-semibold">Recovery Key Rule: </strong>
+            Changing your PIN automatically generates a new 12-word recovery key. Your previous recovery key will stop working immediately upon confirmation. You must confirm the new 12 words before the PIN change takes effect.
+          </div>
+        </div>
 
         {pinChangeMsg && (
           <div
@@ -334,7 +387,7 @@ export function SettingsView() {
               disabled={isChangingPin || !oldPin || !newPin}
               className="rounded-xl bg-gradient-to-r from-gold to-gold-light px-5 py-2 text-xs font-semibold text-[#0b0d10] hover:brightness-110 disabled:opacity-50 transition-all"
             >
-              {isChangingPin ? 'Re-encrypting Vault...' : 'Update Master PIN'}
+              {isChangingPin ? 'Verifying PIN...' : 'Continue to Recovery Key Setup'}
             </button>
           </div>
         </form>
@@ -596,7 +649,7 @@ export function SettingsView() {
             const conv = convertCurrency(acc.balanceCents, acc.currency, displayCurrency, rates);
             const convBal = conv ? conv.convertedAmount : acc.balanceCents;
             const rateUsed = rates[acc.currency] || 1;
-            const asOf = fxRate?.asOfDate || '2026-11-15';
+            const asOf = fxRate?.asOfDate || 'unknown';
 
             return (
               <div
@@ -772,6 +825,124 @@ export function SettingsView() {
           </button>
         </div>
       </div>
+
+      {/* Change PIN New Recovery Key Confirmation Modal (Item 1) */}
+      {isPinRecoveryModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-2xl border border-gold/40 bg-[#111419] p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-[#1e222b] pb-3">
+              <div className="flex items-center gap-2">
+                <Shield className="h-5 w-5 text-gold" />
+                <h3 className="text-sm font-semibold text-[#f5f3ef]">
+                  Step 2: Confirm New 12-Word Recovery Key
+                </h3>
+              </div>
+              <button
+                onClick={() => {
+                  setIsPinRecoveryModalOpen(false);
+                  setPinRecoveryWords([]);
+                }}
+                className="text-[#9e9a93] hover:text-[#f5f3ef]"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-300 space-y-1">
+              <div className="flex items-center gap-1.5 font-semibold text-amber-400">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <span>Important Security Rule: Old Key Invalidation</span>
+              </div>
+              <p>
+                Changing your PIN permanently invalidates your previous 12-word recovery key.
+                Write down this <strong>new 12-word phrase</strong> below.
+                Your PIN will NOT change until you verify 3 random words.
+              </p>
+            </div>
+
+            {/* 12-Word Grid */}
+            <div className="grid grid-cols-3 gap-2 rounded-xl border border-[#1e222b] bg-[#0b0d10] p-3 text-xs font-mono">
+              {pinRecoveryWords.map((word, idx) => (
+                <div key={idx} className="flex items-center gap-1.5 rounded-lg bg-[#171a21] px-2 py-1.5 text-[#c8c4bc]">
+                  <span className="text-[#9e9a93] select-none text-[10px] w-4">{idx + 1}.</span>
+                  <span className="font-semibold text-gold-light">{word}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(pinRecoveryWords.join(' '));
+                  setCopiedPinWords(true);
+                  setTimeout(() => setCopiedPinWords(false), 2000);
+                }}
+                className="flex items-center gap-1.5 rounded-lg border border-[#262930] bg-[#171a21] px-3 py-1.5 text-xs text-[#c8c4bc] hover:border-gold/30 hover:text-gold"
+              >
+                {copiedPinWords ? <Check className="h-3.5 w-3.5 text-gain" /> : <Copy className="h-3.5 w-3.5" />}
+                <span>{copiedPinWords ? 'Copied to Clipboard' : 'Copy 12 Words'}</span>
+              </button>
+            </div>
+
+            {/* 3-Word Verification */}
+            <div className="space-y-2 border-t border-[#1e222b] pt-3">
+              <label className="text-xs font-medium text-[#c8c4bc]">
+                Verify 3 Words from your New Key:
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {pinVerifyIndices.map((wordIdx) => (
+                  <div key={wordIdx}>
+                    <label className="text-[10px] text-[#9e9a93] block mb-1">
+                      Word #{wordIdx + 1}
+                    </label>
+                    <input
+                      type="text"
+                      autoComplete="off"
+                      value={pinVerifyInputs[wordIdx] || ''}
+                      onChange={(e) =>
+                        setPinVerifyInputs({
+                          ...pinVerifyInputs,
+                          [wordIdx]: e.target.value.toLowerCase().trim(),
+                        })
+                      }
+                      placeholder={`Word #${wordIdx + 1}`}
+                      className="w-full rounded-lg border border-[#262930] bg-[#0b0d10] px-2.5 py-1.5 text-xs text-[#f5f3ef] font-mono focus:border-gold focus:outline-none"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center justify-between border-t border-[#1e222b] pt-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsPinRecoveryModalOpen(false);
+                  setPinRecoveryWords([]);
+                }}
+                className="rounded-xl border border-[#262930] px-4 py-2 text-xs font-semibold text-[#9e9a93] hover:text-[#f5f3ef]"
+              >
+                Cancel (PIN Unchanged)
+              </button>
+              <button
+                type="button"
+                disabled={
+                  isChangingPin ||
+                  pinVerifyIndices.some(
+                    (idx) => (pinVerifyInputs[idx] || '').trim() !== pinRecoveryWords[idx]
+                  )
+                }
+                onClick={handleConfirmPinChangeWithKey}
+                className="rounded-xl bg-gradient-to-r from-gold to-gold-light px-5 py-2 text-xs font-semibold text-[#0b0d10] hover:brightness-110 disabled:opacity-40 transition-all"
+              >
+                {isChangingPin ? 'Re-encrypting Vault...' : 'Confirm PIN Change & Activate Key'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

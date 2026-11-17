@@ -41,6 +41,7 @@ export function Dashboard2D({
     investments,
     accounts,
     fxRatesMap,
+    netWorthUnconverted,
   } = useStore();
 
   const rates = fxRatesMap?.rates || {};
@@ -64,12 +65,13 @@ export function Dashboard2D({
       const monthStr = `${y}-${m}`;
       const label = d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
 
-      // Sum only DEBIT entries for this month, converted to display currency
+      // Sum only DEBIT entries for this month, converted to display currency (Item 4: Never silently mix unconverted amounts)
       const sumCents = expenses
         .filter((e) => e.date.startsWith(monthStr) && (e.entryType === 'debit' || !e.entryType))
         .reduce((acc, e) => {
+          if (e.currency === displayCurrency) return acc + e.amountCents;
           const conv = convertCurrency(e.amountCents, e.currency, displayCurrency, rates);
-          return acc + (conv ? conv.convertedAmount : e.amountCents);
+          return acc + (conv ? conv.convertedAmount : 0);
         }, 0);
 
       months.push({
@@ -88,8 +90,14 @@ export function Dashboard2D({
   expenses
     .filter((e) => e.date.startsWith(currentMonthStr) && (e.entryType === 'debit' || !e.entryType))
     .forEach((e) => {
-      const conv = convertCurrency(e.amountCents, e.currency, displayCurrency, rates);
-      const amt = fromSmallestUnit(conv ? conv.convertedAmount : e.amountCents, displayCurrency);
+      let amtCents = 0;
+      if (e.currency === displayCurrency) {
+        amtCents = e.amountCents;
+      } else {
+        const conv = convertCurrency(e.amountCents, e.currency, displayCurrency, rates);
+        if (conv) amtCents = conv.convertedAmount;
+      }
+      const amt = fromSmallestUnit(amtCents, displayCurrency);
       categoryMap.set(e.category, (categoryMap.get(e.category) || 0) + amt);
     });
 
@@ -108,6 +116,7 @@ export function Dashboard2D({
               <h3 className="text-sm font-semibold text-[#f5f3ef]">Net Worth Composition</h3>
               <p className="text-xs text-[#9e9a93]">
                 Total Net Worth: {formatMoney(totalNetWorthCents, displayCurrency)}
+                {netWorthUnconverted.length > 0 ? ` * (Partial: ${netWorthUnconverted.join(', ')})` : ''}
               </p>
             </div>
             <span className="rounded bg-gold/10 px-2 py-0.5 text-[11px] font-medium text-gold-light border border-gold/30">

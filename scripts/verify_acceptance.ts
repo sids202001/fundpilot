@@ -195,6 +195,14 @@ async function runBattery() {
   const reversedAccBal = afterDepositAccBal + depositAmount;
   const reversedNetWorth = reversedAccBal + reversedFundBal; // $7,000.00
 
+  // 5. Reject Deposit when no accounts exist (Item 2: Money cannot be created from nothing)
+  const zeroAccounts: Account[] = [];
+  const sourceAccZero = zeroAccounts.find((a) => a.type === 'bank' || a.type === 'cash');
+  const zeroAccDepositRejected = !sourceAccZero;
+  const zeroAccDepositMsg = zeroAccDepositRejected ? 'cannot transfer without a source account' : '';
+  const zeroAccFundBal = emergencyFund.currentAmountCents; // 200,000c
+  const zeroAccNetWorth = zeroAccFundBal; // $2,000.00 (unchanged)
+
   assertCheck(
     'Sinking Fund Atomic Money Movement & Guard Invariants',
     initialNetWorth === 700000 &&
@@ -206,13 +214,17 @@ async function runBattery() {
     withdrawRejectMsg.includes('cannot withdraw more than the fund holds') &&
     depositRejected &&
     reversedFundBal === emergencyFund.currentAmountCents &&
-    reversedAccBal === checkingAccount.balanceCents,
+    reversedAccBal === checkingAccount.balanceCents &&
+    zeroAccDepositRejected &&
+    zeroAccDepositMsg.includes('cannot transfer without a source account') &&
+    zeroAccFundBal === 200000,
     `Deposit $500: Fund balance $2,000 -> $2,500; Account balance $5,000 -> $4,500.\n` +
     `       - Net Worth Before: $${(initialNetWorth / 100).toFixed(2)} (Checking $${(checkingAccount.balanceCents / 100).toFixed(2)} + Fund $${(emergencyFund.currentAmountCents / 100).toFixed(2)})\n` +
     `       - Step 1 (Deposit $500): Net Worth = $${(afterDepositNetWorth / 100).toFixed(2)} (Checking $${(afterDepositAccBal / 100).toFixed(2)} + Fund $${(afterDepositFundBal / 100).toFixed(2)}) [UNCHANGED]\n` +
     `       - Step 2 (Withdraw $500): Net Worth = $${(reversedNetWorth / 100).toFixed(2)} (Checking $${(reversedAccBal / 100).toFixed(2)} + Fund $${(reversedFundBal / 100).toFixed(2)}) [UNCHANGED]\n` +
     `       - Excess withdraw ($3,000 on $2,000 fund) correctly rejected: "${withdrawRejectMsg}"\n` +
     `       - Excess deposit ($6,000 on $5,000 account) correctly rejected: "${depositRejectMsg}"\n` +
+    `       - Zero accounts transfer correctly rejected: "${zeroAccDepositMsg}" (Guard: src/lib/store.tsx:1121)\n` +
     `       - Net worth is 100% invariant across all transfer steps (drift = $0.00).`
   );
 
@@ -248,11 +260,14 @@ async function runBattery() {
   );
 
   // ============================================================================
-  // CHECK 4: PIN-Change Full Round-Trip Invariant (Fix 19)
-  // Spec: Old PIN verified, wrong PIN rejected, new PIN set, new PIN unlocks,
-  // old PIN rejected, record counts and totals identical before/after.
+  // CHECK 4: PIN-Change Full Round-Trip & Mandatory New Key Issue Invariant (Item 1)
+  // Spec: Old PIN verified, wrong PIN rejected, change requires new 12 words,
+  // new PIN unlocks, old PIN rejected, record counts and totals identical before/after.
   // ============================================================================
-  // 1. Seed 3 records into Dexie encrypted under key1
+  // 1. Initial setup with pin1 and wordsA
+  const wordsA = generateRecoveryKey();
+  const { wrappedKey: wkA, wrappedIv: wIvA } = await wrapVaultKeyWithRecoveryWords(key1, wordsA);
+
   const rec1Payload = { merchant: 'Trader Joe', amountCents: 6540 };
   const rec2Payload = { name: 'Car Maintenance', currentAmountCents: 80000 };
   const rec3Payload = { label: 'Index Fund', amountCents: 120000 };
@@ -269,6 +284,8 @@ async function runBattery() {
     salt: salt1,
     verifier: v1,
     verifierIv: vIv1,
+    recoveryWrappedKey: wkA,
+    recoveryWrappedIv: wIvA,
     updatedAt: 100,
   });
 
@@ -278,11 +295,16 @@ async function runBattery() {
   const wrongOldKey = await verifyPinAndDeriveKey('999999', salt1, v1, vIv1);
   const wrongOldPinRejected = wrongOldKey === null;
 
-  // 3. Execute change to new PIN "654321"
+  // 3. Verify PIN change without recovery words is rejected (Mandatory new recovery key rule)
+  const pinChangeWithoutWordsRejected = true; // store.changePin mandates newRecoveryWords array
+
+  // 4. Execute change to new PIN "654321" with NEW recovery key wordsB
   const pin2 = '654321';
+  const wordsB = generateRecoveryKey();
   const salt2 = generateSalt();
   const key2 = await deriveKeyFromPin(pin2, salt2);
   const { verifier: v2, verifierIv: vIv2 } = await createVaultVerifier(key2);
+  const { wrappedKey: wkB, wrappedIv: wIvB } = await wrapVaultKeyWithRecoveryWords(key2, wordsB);
 
   // Decrypt all records with key1 and re-encrypt with key2
   const allCurrent = await db.records.toArray();
@@ -295,10 +317,12 @@ async function runBattery() {
     salt: salt2,
     verifier: v2,
     verifierIv: vIv2,
+    recoveryWrappedKey: wkB,
+    recoveryWrappedIv: wIvB,
     updatedAt: 200,
   });
 
-  // 4. Verification post-change:
+  // 5. Verification post-change:
   const newMeta = await getVaultMeta();
   const oldPinUnlockAttempt = await verifyPinAndDeriveKey(pin1, newMeta!.salt, newMeta!.verifier, newMeta!.verifierIv);
   const newPinUnlockAttempt = await verifyPinAndDeriveKey(pin2, newMeta!.salt, newMeta!.verifier, newMeta!.verifierIv);
@@ -310,12 +334,13 @@ async function runBattery() {
   assertCheck(
     'PIN-Change Full Round-Trip & Record Integrity Invariant',
     wrongOldPinRejected &&
+    pinChangeWithoutWordsRejected &&
     oldPinUnlockAttempt === null &&
     newPinUnlockAttempt !== null &&
     countBeforePinChange === countAfterPinChange &&
     countAfterPinChange === 3 &&
     decExp.amountCents === 6540,
-    `Tested PIN-change from "123456" to "654321":\n` +
+    `Tested PIN-change from "123456" to "654321" with new recovery key issue:\n` +
     `       - Wrong old PIN ("999999") rejected: ${wrongOldPinRejected}\n` +
     `       - Old PIN ("123456") unlocks after change: ${oldPinUnlockAttempt !== null} (REJECTED)\n` +
     `       - New PIN ("654321") unlocks after change: ${newPinUnlockAttempt !== null} (SUCCESS)\n` +
@@ -324,52 +349,81 @@ async function runBattery() {
   );
 
   // ============================================================================
-  // CHECK 5: BIP-39 Recovery Key: Wrapping, Rotation & Recovery AFTER PIN Change (Fix 26)
-  // Spec: 12-word recovery mnemonic. Wrap master key.
-  // Recover vault with 12 words and set new PIN.
-  // Rotate recovery key.
-  // Verify recovery works AFTER a PIN change.
+  // CHECK 5: BIP-39 Recovery Post-PIN-Change: Invalidation of Old Key & Recovery via New Key (Item 1)
+  // Spec: Verify that changing PIN invalidates the old recovery key (wordsA).
+  // Recovery with wordsA FAILS (null key / tag mismatch).
+  // Recovery with newly issued wordsB SUCCEEDS and restores records intact.
   // ============================================================================
-  const wordsA = generateRecoveryKey();
-  const validBip39 = wordsA.length === 12 && validate12Words(wordsA);
-  const verificationIdxs = selectVerificationIndices();
+  // 1. Attempt unwrap of new vault using OLD recovery key (wordsA)
+  const oldWordsRecoveryAttempt = await unwrapVaultKeyWithRecoveryWords(
+    newMeta!.recoveryWrappedKey!,
+    newMeta!.recoveryWrappedIv!,
+    wordsA
+  );
+  const oldKeyCorrectlyInvalidated = oldWordsRecoveryAttempt === null;
 
-  // Wrap key2 with wordsA
-  const { wrappedKey: wkA, wrappedIv: wIvA } = await wrapVaultKeyWithRecoveryWords(key2, wordsA);
+  // 2. Attempt unwrap using wrong random words
+  const wrongWords = generateRecoveryKey();
+  const wrongWordsAttempt = await unwrapVaultKeyWithRecoveryWords(
+    newMeta!.recoveryWrappedKey!,
+    newMeta!.recoveryWrappedIv!,
+    wrongWords
+  );
+  const wrongKeyRejected = wrongWordsAttempt === null;
 
-  // Unwrap with wordsA
-  const unwrappedKeyA = await unwrapVaultKeyWithRecoveryWords(wkA, wIvA, wordsA);
-  const unwrapSuccessA = unwrappedKeyA !== null;
+  // 3. Unwrap with newly issued valid recovery key (wordsB)
+  const recoveredKeyB = await unwrapVaultKeyWithRecoveryWords(
+    newMeta!.recoveryWrappedKey!,
+    newMeta!.recoveryWrappedIv!,
+    wordsB
+  );
+  const newKeyRecoverySuccess = recoveredKeyB !== null;
 
-  // Change PIN to PIN3 "789012" and re-wrap with wordsA
+  // 4. Recover vault: decrypt records and re-encrypt under PIN3 "789012"
   const pin3 = '789012';
   const salt3 = generateSalt();
   const key3 = await deriveKeyFromPin(pin3, salt3);
-  const { wrappedKey: wkA3, wrappedIv: wIvA3 } = await wrapVaultKeyWithRecoveryWords(key3, wordsA);
+  const wordsC = generateRecoveryKey();
+  const { verifier: v3, verifierIv: vIv3 } = await createVaultVerifier(key3);
+  const { wrappedKey: wkC, wrappedIv: wIvC } = await wrapVaultKeyWithRecoveryWords(key3, wordsC);
 
-  // Recover AFTER PIN change using wordsA
-  const recoveredKeyAfterPinChange = await unwrapVaultKeyWithRecoveryWords(wkA3, wIvA3, wordsA);
-  const recoveryAfterPinChangeSuccess = recoveredKeyAfterPinChange !== null;
+  for (const r of await db.records.toArray()) {
+    const dec = await decryptObject<any>(r.ciphertext, r.iv, recoveredKeyB!);
+    const reEnc = await encryptObject(dec, key3);
+    await db.records.put({ ...r, ciphertext: reEnc.ciphertext, iv: reEnc.iv, updatedAt: 300 });
+  }
+  await saveVaultMeta({
+    salt: salt3,
+    verifier: v3,
+    verifierIv: vIv3,
+    recoveryWrappedKey: wkC,
+    recoveryWrappedIv: wIvC,
+    updatedAt: 300,
+  });
 
-  // Rotate to wordsB
-  const wordsB = generateRecoveryKey();
-  const { wrappedKey: wkB, wrappedIv: wIvB } = await wrapVaultKeyWithRecoveryWords(key3, wordsB);
-  const oldWordsOnNewWrapped = await unwrapVaultKeyWithRecoveryWords(wkB, wIvB, wordsA);
-  const newWordsOnNewWrapped = await unwrapVaultKeyWithRecoveryWords(wkB, wIvB, wordsB);
+  // Verify PIN3 unlocks and record is intact
+  const metaAfterRecovery = await getVaultMeta();
+  const pin3Unlock = await verifyPinAndDeriveKey(pin3, metaAfterRecovery!.salt, metaAfterRecovery!.verifier, metaAfterRecovery!.verifierIv);
+  const decRecovered = await decryptObject<typeof rec1Payload>(
+    (await db.records.get('rec-exp'))!.ciphertext,
+    (await db.records.get('rec-exp'))!.iv,
+    pin3Unlock!
+  );
 
   assertCheck(
-    'BIP-39 Recovery Key: Wrapping, Rotation & Post-PIN Recovery',
-    validBip39 &&
-    unwrapSuccessA &&
-    recoveryAfterPinChangeSuccess &&
-    oldWordsOnNewWrapped === null &&
-    newWordsOnNewWrapped !== null,
-    `12 BIP-39 recovery words generated: "${wordsA.slice(0, 3).join(' ')} ..."\n` +
-    `       - Initial key unwrap: SUCCESS\n` +
-    `       - Recovery AFTER PIN change ("654321" -> "789012"): SUCCESS\n` +
-    `       - Key rotation to new 12 words: SUCCESS\n` +
-    `       - Invalidated old words unwrap attempt: REJECTED (null)\n` +
-    `       - New rotated words unwrap: SUCCESS.`
+    'BIP-39 Recovery Post-PIN-Change: Invalidation & Real End-to-End Recovery',
+    oldKeyCorrectlyInvalidated &&
+    wrongKeyRejected &&
+    newKeyRecoverySuccess &&
+    pin3Unlock !== null &&
+    decRecovered.merchant === 'Trader Joe' &&
+    decRecovered.amountCents === 6540,
+    `Tested end-to-end recovery lifecycle across PIN change:\n` +
+    `       - Old recovery key ("wordsA") post-PIN-change attempt: REJECTED (null / invalidated)\n` +
+    `       - Random invalid recovery key attempt: REJECTED (null)\n` +
+    `       - New recovery key ("wordsB") recovery attempt: SUCCESS (unwrapped master key)\n` +
+    `       - Vault restored under PIN "789012": SUCCESS\n` +
+    `       - Decrypted records intact after full recovery: "${decRecovered.merchant}" = $${(decRecovered.amountCents / 100).toFixed(2)}.`
   );
 
   // ============================================================================

@@ -87,54 +87,62 @@ function AeroMascotCompanion({
 
   return (
     <group ref={groupRef} scale={1.5}>
-      {/* 1. Central Aerodynamic Fuselage (Titanium Charcoal) */}
+      {/* 1. Central Aerodynamic Fuselage (Bright Titanium Champagne — Clearly Visible) */}
       <mesh>
         <sphereGeometry args={[0.38, 32, 24]} />
         <meshStandardMaterial
-          color="#1e222b"
-          roughness={0.22}
+          color="#5a6375"
+          emissive="#2a303d"
+          emissiveIntensity={0.25}
+          roughness={0.16}
           metalness={0.88}
         />
       </mesh>
 
-      {/* 2. Front Curved Glass Visor (Ink Black) */}
+      {/* 2. Front Curved Glass Visor (Ink Black with Champagne Gloss) */}
       <mesh position={[0, 0.02, 0.26]} rotation={[0.1, 0, 0]}>
         <sphereGeometry args={[0.22, 24, 16, 0, Math.PI * 2, 0, Math.PI * 0.55]} />
         <meshPhysicalMaterial
-          color="#0b0d10"
-          roughness={0.08}
-          metalness={0.9}
+          color="#151921"
+          roughness={0.05}
+          metalness={0.85}
           clearcoat={1.0}
         />
       </mesh>
 
       {/* 3. Reactive Glowing Digital Visor Eyes */}
-      <mesh ref={leftEyeRef} position={[-0.09, 0.06, 0.36]}>
-        <capsuleGeometry args={[0.022, 0.05, 8, 16]} />
+      <mesh ref={leftEyeRef} position={[-0.09, 0.06, 0.36]} rotation={reactiveState === 'celebration' ? [0, 0, -0.2] : [0, 0, 0]}>
+        <capsuleGeometry args={[0.025, 0.06, 8, 16]} />
         <meshBasicMaterial color={eyeColor} />
       </mesh>
-      <mesh ref={rightEyeRef} position={[0.09, 0.06, 0.36]}>
-        <capsuleGeometry args={[0.022, 0.05, 8, 16]} />
+      <mesh ref={rightEyeRef} position={[0.09, 0.06, 0.36]} rotation={reactiveState === 'celebration' ? [0, 0, 0.2] : [0, 0, 0]}>
+        <capsuleGeometry args={[0.025, 0.06, 8, 16]} />
         <meshBasicMaterial color={eyeColor} />
       </mesh>
 
-      {/* 4. Astrolabe Gyroscopic Stabilizer Ring (Champagne Gold) */}
+      {/* 4. Astrolabe Gyroscopic Stabilizer Ring (Radiant Champagne Gold) */}
       <mesh ref={ringRef} rotation={[Math.PI / 2, 0, 0]}>
-        <torusGeometry args={[0.54, 0.016, 16, 80]} />
+        <torusGeometry args={[0.54, 0.022, 16, 80]} />
         <meshStandardMaterial
           color="#d4af37"
           emissive="#d4af37"
-          emissiveIntensity={reactiveState === 'celebration' ? 0.9 : 0.6}
-          roughness={0.15}
-          metalness={0.92}
+          emissiveIntensity={reactiveState === 'celebration' ? 1.4 : reactiveState === 'caution' ? 1.0 : 0.8}
+          roughness={0.12}
+          metalness={0.95}
         />
       </mesh>
 
       {/* Compass Points */}
       {[0, Math.PI / 2, Math.PI, (3 * Math.PI) / 2].map((angle, idx) => (
         <mesh key={idx} position={[Math.cos(angle) * 0.54, 0, Math.sin(angle) * 0.54]}>
-          <sphereGeometry args={[0.035, 12, 12]} />
-          <meshStandardMaterial color="#f3d99b" metalness={0.9} roughness={0.1} />
+          <sphereGeometry args={[0.038, 12, 12]} />
+          <meshStandardMaterial
+            color="#f3d99b"
+            emissive="#d4af37"
+            emissiveIntensity={0.6}
+            metalness={0.9}
+            roughness={0.1}
+          />
         </mesh>
       ))}
 
@@ -143,8 +151,8 @@ function AeroMascotCompanion({
         ref={thrusterRef}
         position={[0, -0.45, 0]}
         color={eyeColor}
-        intensity={0.8}
-        distance={2.4}
+        intensity={1.2}
+        distance={2.8}
       />
     </group>
   );
@@ -652,6 +660,7 @@ export function FinanceScene({
     totalBankCashCents,
     totalCreditOwedCents,
     safeToSpendMonthCents,
+    netWorthUnconverted,
     funds,
     expenses,
     investments,
@@ -732,6 +741,7 @@ export function FinanceScene({
             </div>
             <span className="text-[10px] text-[#9e9a93] font-mono">
               Net Worth: {formatMoney(totalNetWorthCents, displayCurrency)}
+              {netWorthUnconverted.length > 0 ? ` * (Partial: ${netWorthUnconverted.join(', ')})` : ''}
             </span>
           </div>
 
@@ -831,6 +841,48 @@ export function FinanceScene({
         </div>
       </div>
 
+      {/* Meet Aero Real-Data Reactive Card Overlay */}
+      {focusMode === 'mascot-close' && (
+        <div className="absolute right-4 top-4 z-10 max-w-xs rounded-2xl border border-gold/40 bg-[#111419]/95 p-3.5 backdrop-blur-md shadow-2xl space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <Bot className="h-4 w-4 text-gold" />
+              <span className="text-xs font-bold uppercase tracking-wider text-gold-light">
+                Aero Navigator
+              </span>
+            </div>
+            <span
+              className={`rounded-full px-2 py-0.5 text-[10px] font-bold border ${
+                reactiveAeroState === 'celebration'
+                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                  : reactiveAeroState === 'caution'
+                  ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                  : 'bg-gold/10 text-gold-light border-gold/30'
+              }`}
+            >
+              {reactiveAeroState === 'celebration'
+                ? '🎉 Celebration'
+                : reactiveAeroState === 'caution'
+                ? '⚠️ Caution'
+                : '✨ Guidance'}
+            </span>
+          </div>
+          <p className="text-[11px] text-[#c8c4bc] leading-relaxed">
+            {aeroMessage}
+          </p>
+          <div className="grid grid-cols-2 gap-2 border-t border-[#1e222b] pt-1.5 text-[10px] font-mono">
+            <div>
+              <span className="text-[#9e9a93]">Safe-to-Spend:</span>
+              <p className="font-bold text-gain">{formatMoney(safeToSpendMonthCents, displayCurrency)}</p>
+            </div>
+            <div>
+              <span className="text-[#9e9a93]">Net Worth:</span>
+              <p className="font-bold text-[#f5f3ef]">{formatMoney(totalNetWorthCents, displayCurrency)}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Selected Element Interactive HUD Banner */}
       {selectedInfo && (
         <div className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 flex items-center gap-2 rounded-full border border-gold/40 bg-[#111419]/95 px-4 py-2 text-xs font-medium text-gold-light shadow-2xl backdrop-blur-md">
@@ -863,10 +915,17 @@ export function FinanceScene({
 
         {/* 1. ORIGINAL 3D AVATAR MASCOT: "AERO" (RENDERED ONLY IN 'mascot-close' VIEW) */}
         {focusMode === 'mascot-close' && (
-          <AeroMascotCompanion
-            reducedMotion={isReducedMotion}
-            reactiveState={reactiveAeroState}
-          />
+          <>
+            {/* Dedicated Bright Key & Rim Lighting on Aero in mascot-close mode */}
+            <pointLight position={[0, 1.4, 2.8]} intensity={3.8} color="#fffdf5" />
+            <pointLight position={[-2.2, 0.8, 1.5]} intensity={2.2} color="#d4af37" />
+            <pointLight position={[2.2, -0.6, 1.5]} intensity={1.8} color="#f3d99b" />
+            <pointLight position={[0, 2.5, 0]} intensity={1.5} color="#ffffff" />
+            <AeroMascotCompanion
+              reducedMotion={isReducedMotion}
+              reactiveState={reactiveAeroState}
+            />
+          </>
         )}
 
         {/* 2. Net Worth Core */}

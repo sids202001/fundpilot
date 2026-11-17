@@ -117,7 +117,7 @@ export function Navbar({ activeTab, setActiveTab }: NavbarProps) {
             <div className="hidden lg:flex items-center gap-1.5 rounded-lg border border-[#1e222b] bg-[#111419]/75 px-2.5 py-1 text-[11px] text-[#f5f3ef]">
               <Coins className="h-3.5 w-3.5 text-[#d4af37]" />
               <span>$1 = ₹{fxRate.rate.toFixed(2)}</span>
-              <span className="text-[9px] text-[#9e9a93]">({fxRate.asOfDate})</span>
+              <span className="text-[9px] text-[#9e9a93]">{fxRate.asOfDate ? `(${fxRate.asOfDate})` : '(date unknown)'}</span>
             </div>
           )}
 

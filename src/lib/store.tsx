@@ -33,6 +33,7 @@ import {
 import { db, getVaultMeta, saveVaultMeta, wipeAllData } from './db';
 import { detectSubscriptions } from './subscriptionDetector';
 import { convertCurrency, formatMoney, getCurrencyDecimals } from './currencies';
+import { validate12Words } from './bip39';
 
 // Helper: Get local YYYY-MM-DD date string (Fix 15)
 export function getLocalDate(date: Date = new Date()): string {
@@ -73,7 +74,7 @@ interface StoreContextType {
   setupPin: (pin: string, recoveryWords: string[]) => Promise<boolean>;
   unlockVault: (pin: string) => Promise<boolean>;
   recoverVaultWithKey: (recoveryWords: string[], newPin: string) => Promise<boolean>;
-  changePin: (oldPin: string, newPin: string, recoveryWords?: string[]) => Promise<boolean>;
+  changePin: (oldPin: string, newPin: string, newRecoveryWords: string[]) => Promise<boolean>;
   rotateRecoveryKey: (newRecoveryWords: string[]) => Promise<boolean>;
   lockVault: () => void;
   autoLockMinutes: number;
@@ -94,7 +95,7 @@ interface StoreContextType {
   // FX & Offline
   fxRatesMap: FxRatesMap | null;
   rates: Record<string, number>;
-  fxRate: { rate: number; asOfDate: string } | null;
+  fxRate: { rate: number; asOfDate: string | null } | null;
   refreshFx: () => Promise<void>;
   isOffline: boolean;
 
@@ -163,6 +164,15 @@ interface StoreContextType {
   monthlyDebitSpentCents: number;
   monthlyCreditInflowCents: number;
   migratedHoldingsCount: number;
+
+  // Honest Multi-Currency Status Markers (Item 4)
+  unconvertedCurrencies: string[];
+  netWorthUnconverted: string[];
+  bankCashUnconverted: string[];
+  fundsUnconverted: string[];
+  investmentsUnconverted: string[];
+  creditOwedUnconverted: string[];
+  safeToSpendUnconverted: string[];
 }
 
 const DEFAULT_SETTINGS: UserSettings = {
@@ -781,9 +791,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Change PIN flow (Fix 19 & Fix 26)
-  const changePin = async (oldPin: string, newPin: string, recoveryWords?: string[]): Promise<boolean> => {
+  // Change PIN flow with Mandatory New Recovery Key Issue (Item 1)
+  const changePin = async (oldPin: string, newPin: string, newRecoveryWords: string[]): Promise<boolean> => {
     try {
+      // Mandate valid 12-word recovery key to prevent leaving stale recovery wrap behind
+      if (!newRecoveryWords || newRecoveryWords.length !== 12 || !validate12Words(newRecoveryWords)) {
+        console.error('changePin rejected: newRecoveryWords must be a valid 12-word BIP-39 phrase');
+        return false;
+      }
+
       const meta = await getVaultMeta();
       if (!meta) return false;
 
@@ -804,22 +820,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       const newKey = await deriveKeyFromPin(newPin, newSalt);
       const { verifier, verifierIv } = await createVaultVerifier(newKey);
 
-      // Re-wrap recovery key if recovery key was present or supplied
-      let wrappedKey = meta.recoveryWrappedKey;
-      let wrappedIv = meta.recoveryWrappedIv;
+      // 4. Wrap new master key with the NEW recovery key
+      const { wrappedKey, wrappedIv } = await wrapVaultKeyWithRecoveryWords(newKey, newRecoveryWords);
 
-      if (recoveryWords && recoveryWords.length === 12) {
-        const rewrapped = await wrapVaultKeyWithRecoveryWords(newKey, recoveryWords);
-        wrappedKey = rewrapped.wrappedKey;
-        wrappedIv = rewrapped.wrappedIv;
-      }
-
-      // 4. Atomic re-encryption of all records under newKey
+      // 5. Atomic re-encryption of all records under newKey
       for (const item of decryptedItems) {
         await persistRecord(item.type, item.id, item.data, newKey);
       }
 
-      // 5. Save updated vault meta
+      // 6. Save updated vault meta with new salt, verifier, and NEW recovery wrap
       await saveVaultMeta({
         salt: newSalt,
         verifier,
@@ -1118,13 +1127,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       ? accounts.find((a) => a.id === sourceAccountId)
       : accounts.find((a) => a.type === 'bank' || a.type === 'cash');
 
+    // Reject transfer if no source account exists (Item 2: Money cannot be created from nothing)
+    if (!sourceAcc) {
+      return { success: false, error: 'cannot transfer without a source account' };
+    }
+
     // Reject withdraw that exceeds fund balance (Fix 1)
     if (type === 'withdraw' && amountCents > fund.currentAmountCents) {
       return { success: false, error: 'cannot withdraw more than the fund holds' };
     }
 
     // Reject deposit if source holds less than transfer amount (Fix 18)
-    if (type === 'deposit' && sourceAcc && amountCents > sourceAcc.balanceCents) {
+    if (type === 'deposit' && amountCents > sourceAcc.balanceCents) {
       return { success: false, error: 'cannot allocate more than the source account balance holds' };
     }
 
@@ -1672,56 +1686,116 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const displayCurrency = settings.displayCurrency || 'USD';
   const rates = fxRatesMap?.rates || {};
 
-  // 1. Bank Cash & Broker liquid accounts
-  const totalBankCashCents = useMemo(() => {
-    return accounts
-      .filter((a) => a.type === 'bank' || a.type === 'cash' || a.type === 'broker')
-      .reduce((sum, a) => {
+  // 1. Bank Cash & Broker liquid accounts (Item 4: Never silently mix unconverted amounts)
+  const { totalBankCashCents, bankCashUnconverted } = useMemo(() => {
+    let sum = 0;
+    const unconverted: string[] = [];
+    for (const a of accounts.filter((acc) => acc.type === 'bank' || acc.type === 'cash' || acc.type === 'broker')) {
+      if (a.currency === displayCurrency) {
+        sum += a.balanceCents;
+      } else {
         const conv = convertCurrency(a.balanceCents, a.currency, displayCurrency, rates);
-        return sum + (conv ? conv.convertedAmount : a.balanceCents);
-      }, 0);
+        if (conv) {
+          sum += conv.convertedAmount;
+        } else {
+          if (!unconverted.includes(a.currency)) unconverted.push(a.currency);
+        }
+      }
+    }
+    return { totalBankCashCents: sum, bankCashUnconverted: unconverted };
   }, [accounts, displayCurrency, rates]);
 
   // 2. Sinking Funds Total
-  const totalFundsCents = useMemo(() => {
-    return funds.reduce((sum, f) => {
-      const conv = convertCurrency(f.currentAmountCents, f.currency, displayCurrency, rates);
-      return sum + (conv ? conv.convertedAmount : f.currentAmountCents);
-    }, 0);
+  const { totalFundsCents, fundsUnconverted } = useMemo(() => {
+    let sum = 0;
+    const unconverted: string[] = [];
+    for (const f of funds) {
+      if (f.currency === displayCurrency) {
+        sum += f.currentAmountCents;
+      } else {
+        const conv = convertCurrency(f.currentAmountCents, f.currency, displayCurrency, rates);
+        if (conv) {
+          sum += conv.convertedAmount;
+        } else {
+          if (!unconverted.includes(f.currency)) unconverted.push(f.currency);
+        }
+      }
+    }
+    return { totalFundsCents: sum, fundsUnconverted: unconverted };
   }, [funds, displayCurrency, rates]);
 
   // 3. Investments Total (Sum of manual entry totals ONLY)
-  const totalInvestmentsCents = useMemo(() => {
-    return investments.reduce((sum, inv) => {
-      const conv = convertCurrency(inv.amountCents, inv.currency, displayCurrency, rates);
-      return sum + (conv ? conv.convertedAmount : inv.amountCents);
-    }, 0);
+  const { totalInvestmentsCents, investmentsUnconverted } = useMemo(() => {
+    let sum = 0;
+    const unconverted: string[] = [];
+    for (const inv of investments) {
+      if (inv.currency === displayCurrency) {
+        sum += inv.amountCents;
+      } else {
+        const conv = convertCurrency(inv.amountCents, inv.currency, displayCurrency, rates);
+        if (conv) {
+          sum += conv.convertedAmount;
+        } else {
+          if (!unconverted.includes(inv.currency)) unconverted.push(inv.currency);
+        }
+      }
+    }
+    return { totalInvestmentsCents: sum, investmentsUnconverted: unconverted };
   }, [investments, displayCurrency, rates]);
 
   // 4. Credit Card Liabilities Total
-  const totalCreditOwedCents = useMemo(() => {
-    return accounts
-      .filter((a) => a.type === 'credit')
-      .reduce((sum, a) => {
+  const { totalCreditOwedCents, creditOwedUnconverted } = useMemo(() => {
+    let sum = 0;
+    const unconverted: string[] = [];
+    for (const a of accounts.filter((acc) => acc.type === 'credit')) {
+      if (a.currency === displayCurrency) {
+        sum += a.balanceCents;
+      } else {
         const conv = convertCurrency(a.balanceCents, a.currency, displayCurrency, rates);
-        return sum + (conv ? conv.convertedAmount : a.balanceCents);
-      }, 0);
+        if (conv) {
+          sum += conv.convertedAmount;
+        } else {
+          if (!unconverted.includes(a.currency)) unconverted.push(a.currency);
+        }
+      }
+    }
+    return { totalCreditOwedCents: sum, creditOwedUnconverted: unconverted };
   }, [accounts, displayCurrency, rates]);
 
-  // Net Worth 4-Part Sum: Cash + Funds + Investments − Credit Owed
+  // Net Worth 4-Part Sum & Unconverted Status
+  const netWorthUnconverted = useMemo(() => {
+    return Array.from(
+      new Set([
+        ...bankCashUnconverted,
+        ...fundsUnconverted,
+        ...investmentsUnconverted,
+        ...creditOwedUnconverted,
+      ])
+    );
+  }, [bankCashUnconverted, fundsUnconverted, investmentsUnconverted, creditOwedUnconverted]);
+
   const totalNetWorthCents = totalBankCashCents + totalFundsCents + totalInvestmentsCents - totalCreditOwedCents;
 
   // Monthly Spending & Inflow Math (Fix 13: Money-in is NEVER spending)
   const currentMonth = getLocalMonth();
 
   // Debit expenses only count toward spent
-  const monthlyDebitSpentCents = useMemo(() => {
-    return expenses
-      .filter((e) => e.date.startsWith(currentMonth) && (e.entryType === 'debit' || !e.entryType))
-      .reduce((sum, e) => {
+  const { monthlyDebitSpentCents, debitSpentUnconverted } = useMemo(() => {
+    let sum = 0;
+    const unconverted: string[] = [];
+    for (const e of expenses.filter((exp) => exp.date.startsWith(currentMonth) && (exp.entryType === 'debit' || !exp.entryType))) {
+      if (e.currency === displayCurrency) {
+        sum += e.amountCents;
+      } else {
         const conv = convertCurrency(e.amountCents, e.currency, displayCurrency, rates);
-        return sum + (conv ? conv.convertedAmount : e.amountCents);
-      }, 0);
+        if (conv) {
+          sum += conv.convertedAmount;
+        } else {
+          if (!unconverted.includes(e.currency)) unconverted.push(e.currency);
+        }
+      }
+    }
+    return { monthlyDebitSpentCents: sum, debitSpentUnconverted: unconverted };
   }, [expenses, currentMonth, displayCurrency, rates]);
 
   // Credit expenses count toward inflows (cash flow only, never spent)
@@ -1735,42 +1809,70 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   }, [expenses, currentMonth, displayCurrency, rates]);
 
   // Fund deposits this month
-  const fundDepositsThisMonthCents = useMemo(() => {
-    return fundAllocations
-      .filter((a) => a.date.startsWith(currentMonth) && a.type === 'deposit')
-      .reduce((sum, a) => {
-        const fund = funds.find((f) => f.id === a.fundId);
-        const cur = fund ? fund.currency : 'USD';
+  const { fundDepositsThisMonthCents, fundDepositsUnconverted } = useMemo(() => {
+    let sum = 0;
+    const unconverted: string[] = [];
+    for (const a of fundAllocations.filter((alloc) => alloc.date.startsWith(currentMonth) && alloc.type === 'deposit')) {
+      const fund = funds.find((f) => f.id === a.fundId);
+      const cur = fund ? fund.currency : 'USD';
+      if (cur === displayCurrency) {
+        sum += a.amountCents;
+      } else {
         const conv = convertCurrency(a.amountCents, cur, displayCurrency, rates);
-        return sum + (conv ? conv.convertedAmount : a.amountCents);
-      }, 0);
+        if (conv) {
+          sum += conv.convertedAmount;
+        } else {
+          if (!unconverted.includes(cur)) unconverted.push(cur);
+        }
+      }
+    }
+    return { fundDepositsThisMonthCents: sum, fundDepositsUnconverted: unconverted };
   }, [fundAllocations, funds, currentMonth, displayCurrency, rates]);
 
   // Safe to Spend = Monthly Income − Fixed Bills − Fund Deposits − Debit Spent
-  const incomeConverted = useMemo(() => {
-    const conv = convertCurrency(
-      settings.monthlyIncomeCents,
-      settings.incomeCurrency || 'USD',
-      displayCurrency,
-      rates
-    );
-    return conv ? conv.convertedAmount : settings.monthlyIncomeCents;
+  const { incomeConverted, incomeUnconverted } = useMemo(() => {
+    const cur = settings.incomeCurrency || 'USD';
+    if (cur === displayCurrency) {
+      return { incomeConverted: settings.monthlyIncomeCents, incomeUnconverted: false };
+    }
+    const conv = convertCurrency(settings.monthlyIncomeCents, cur, displayCurrency, rates);
+    if (conv) {
+      return { incomeConverted: conv.convertedAmount, incomeUnconverted: false };
+    }
+    return { incomeConverted: 0, incomeUnconverted: true };
   }, [settings.monthlyIncomeCents, settings.incomeCurrency, displayCurrency, rates]);
 
-  const fixedBillsConverted = useMemo(() => {
-    const conv = convertCurrency(
-      settings.fixedBillsCents,
-      settings.fixedBillsCurrency || 'USD',
-      displayCurrency,
-      rates
-    );
-    return conv ? conv.convertedAmount : settings.fixedBillsCents;
+  const { fixedBillsConverted, fixedBillsUnconverted } = useMemo(() => {
+    const cur = settings.fixedBillsCurrency || 'USD';
+    if (cur === displayCurrency) {
+      return { fixedBillsConverted: settings.fixedBillsCents, fixedBillsUnconverted: false };
+    }
+    const conv = convertCurrency(settings.fixedBillsCents, cur, displayCurrency, rates);
+    if (conv) {
+      return { fixedBillsConverted: conv.convertedAmount, fixedBillsUnconverted: false };
+    }
+    return { fixedBillsConverted: 0, fixedBillsUnconverted: true };
   }, [settings.fixedBillsCents, settings.fixedBillsCurrency, displayCurrency, rates]);
+
+  const safeToSpendUnconverted = useMemo(() => {
+    const list: string[] = [...debitSpentUnconverted, ...fundDepositsUnconverted];
+    if (incomeUnconverted && settings.incomeCurrency && !list.includes(settings.incomeCurrency)) {
+      list.push(settings.incomeCurrency);
+    }
+    if (fixedBillsUnconverted && settings.fixedBillsCurrency && !list.includes(settings.fixedBillsCurrency)) {
+      list.push(settings.fixedBillsCurrency);
+    }
+    return list;
+  }, [debitSpentUnconverted, fundDepositsUnconverted, incomeUnconverted, fixedBillsUnconverted, settings.incomeCurrency, settings.fixedBillsCurrency]);
 
   const safeToSpendMonthCents = Math.max(
     0,
     incomeConverted - fixedBillsConverted - fundDepositsThisMonthCents - monthlyDebitSpentCents
   );
+
+  const unconvertedCurrencies = useMemo(() => {
+    return Array.from(new Set([...netWorthUnconverted, ...safeToSpendUnconverted]));
+  }, [netWorthUnconverted, safeToSpendUnconverted]);
 
   const fxRate = useMemo(() => {
     if (!fxRatesMap || !fxRatesMap.rates['INR']) return null;
@@ -1852,6 +1954,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         monthlyDebitSpentCents,
         monthlyCreditInflowCents,
         migratedHoldingsCount,
+        unconvertedCurrencies,
+        netWorthUnconverted,
+        bankCashUnconverted,
+        fundsUnconverted,
+        investmentsUnconverted,
+        creditOwedUnconverted,
+        safeToSpendUnconverted,
       }}
     >
       {children}
