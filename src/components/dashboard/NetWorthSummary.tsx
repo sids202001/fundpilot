@@ -15,14 +15,18 @@ export function NetWorthSummary() {
     safeToSpendMonthCents,
     settings,
     updateSettings,
+    accounts,
+    updateAccount,
     expenses,
     fundAllocations,
     displayCurrency,
   } = useStore();
 
   const [isEditingSettings, setIsEditingSettings] = useState(false);
-  const [bankCashInput, setBankCashInput] = useState(((settings.bankCashCents || 0) / 100).toString());
-  const [creditOwedInput, setCreditOwedInput] = useState(((settings.creditCardOwedCents || 0) / 100).toString());
+  const primaryBank = accounts.find((a) => a.type === 'bank' || a.type === 'cash');
+  const primaryCredit = accounts.find((a) => a.type === 'credit');
+  const [bankCashInput, setBankCashInput] = useState(((primaryBank?.balanceCents ?? settings.bankCashCents ?? 0) / 100).toString());
+  const [creditOwedInput, setCreditOwedInput] = useState(((primaryCredit?.balanceCents ?? settings.creditCardOwedCents ?? 0) / 100).toString());
   const [incomeInput, setIncomeInput] = useState(((settings.monthlyIncomeCents || 0) / 100).toString());
   const [fixedBillsInput, setFixedBillsInput] = useState(((settings.fixedBillsCents || 0) / 100).toString());
 
@@ -56,6 +60,13 @@ export function NetWorthSummary() {
     const incCents = Math.round(parseFloat(incomeInput || '0') * 100);
     const billsCents = Math.round(parseFloat(fixedBillsInput || '0') * 100);
 
+    if (primaryBank && !isNaN(cashCents)) {
+      updateAccount(primaryBank.id, { balanceCents: cashCents, lastEditedDate: new Date().toISOString().split('T')[0] });
+    }
+    if (primaryCredit && !isNaN(creditCents)) {
+      updateAccount(primaryCredit.id, { balanceCents: creditCents, lastEditedDate: new Date().toISOString().split('T')[0] });
+    }
+
     updateSettings({
       bankCashCents: isNaN(cashCents) ? 0 : cashCents,
       creditCardOwedCents: isNaN(creditCents) ? 0 : creditCents,
@@ -75,8 +86,8 @@ export function NetWorthSummary() {
             <span className="font-semibold uppercase tracking-wider text-[#d4af37]">Total Net Worth</span>
             <button
               onClick={() => {
-                setBankCashInput(((settings.bankCashCents || 0) / 100).toString());
-                setCreditOwedInput(((settings.creditCardOwedCents || 0) / 100).toString());
+                setBankCashInput(((primaryBank?.balanceCents ?? settings.bankCashCents ?? 0) / 100).toString());
+                setCreditOwedInput(((primaryCredit?.balanceCents ?? settings.creditCardOwedCents ?? 0) / 100).toString());
                 setIncomeInput(((settings.monthlyIncomeCents || 0) / 100).toString());
                 setFixedBillsInput(((settings.fixedBillsCents || 0) / 100).toString());
                 setIsEditingSettings(!isEditingSettings);
@@ -192,6 +203,7 @@ export function NetWorthSummary() {
             <div>
               <label className="text-[11px] font-medium text-[#f5f3ef]">Liquid Bank Cash ($)</label>
               <input
+                id="bank-cash-input"
                 type="number"
                 step="any"
                 value={bankCashInput}

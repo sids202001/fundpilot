@@ -355,41 +355,48 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
                 {activeRules.map((rule) => {
                   const srcAcc = accounts.find((a) => a.id === rule.sourceAccountId);
                   return (
-                    <div key={rule.id} className="flex items-center justify-between text-xs text-[#f5f3ef]">
-                      <div className="flex items-center gap-2">
-                        <span className={rule.active ? '' : 'line-through text-[#716c64]'}>
-                          Move {formatMoney(rule.amountCents, selectedFund.currency)} on day {rule.dayOfMonth}
-                          {srcAcc ? ` from ${srcAcc.name}` : ''}
-                        </span>
-                        {!rule.active && (
-                          <span className="rounded bg-[#262930] px-1.5 py-0.5 text-[10px] text-[#9e9a93]">
-                            Paused
+                    <div key={rule.id} className="flex flex-col gap-1.5 rounded-lg border border-[#262930] bg-[#111419]/60 p-2.5 text-xs text-[#f5f3ef]">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className={rule.active ? '' : 'line-through text-[#716c64]'}>
+                            Move {formatMoney(rule.amountCents, selectedFund.currency)} on day {rule.dayOfMonth}
+                            {srcAcc ? ` from ${srcAcc.name}` : ''}
                           </span>
-                        )}
+                          {!rule.active && (
+                            <span className="rounded bg-[#262930] px-1.5 py-0.5 text-[10px] text-[#9e9a93]">
+                              Paused
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] text-gold-light">
+                            Last: {rule.lastAppliedDate || 'Pending first run'}
+                          </span>
+                          <button
+                            onClick={() => toggleFundAutoRule(rule.id, !rule.active)}
+                            className="rounded p-1 text-[#9e9a93] hover:text-[#f5f3ef]"
+                            title={rule.active ? 'Pause Rule' : 'Resume Rule'}
+                          >
+                            {rule.active ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3 text-gold-light" />}
+                          </button>
+                          <button
+                            onClick={async () => {
+                              if (confirm('Delete this automated recurring rule?')) {
+                                await deleteFundAutoRule(rule.id);
+                              }
+                            }}
+                            className="rounded p-1 text-rose-400 hover:text-rose-300"
+                            title="Delete Rule"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[11px] text-gold-light">
-                          Last: {rule.lastAppliedDate || 'Pending first run'}
-                        </span>
-                        <button
-                          onClick={() => toggleFundAutoRule(rule.id, !rule.active)}
-                          className="rounded p-1 text-[#9e9a93] hover:text-[#f5f3ef]"
-                          title={rule.active ? 'Pause Rule' : 'Resume Rule'}
-                        >
-                          {rule.active ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3 text-gold-light" />}
-                        </button>
-                        <button
-                          onClick={async () => {
-                            if (confirm('Delete this automated recurring rule?')) {
-                              await deleteFundAutoRule(rule.id);
-                            }
-                          }}
-                          className="rounded p-1 text-rose-400 hover:text-rose-300"
-                          title="Delete Rule"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
-                      </div>
+                      {rule.lastSkippedNotice && (
+                        <div className="flex items-center gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-300">
+                          <span>⚠️ {rule.lastSkippedNotice}</span>
+                        </div>
+                      )}
                     </div>
                   );
                 })}

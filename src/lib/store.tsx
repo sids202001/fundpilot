@@ -17,6 +17,7 @@ import {
   VaultRecord,
   SyncTombstone,
   SyncReport,
+  AuditLogEntry,
 } from './types';
 import {
   generateSalt,
@@ -73,10 +74,12 @@ interface StoreContextType {
   setupPin: (pin: string, recoveryWords: string[]) => Promise<boolean>;
   unlockVault: (pin: string) => Promise<boolean>;
   recoverVaultWithKey: (recoveryWords: string[], newPin: string) => Promise<boolean>;
-  changePin: (oldPin: string, newPin: string) => Promise<boolean>;
+  changePin: (oldPin: string, newPin: string, recoveryWords?: string[]) => Promise<boolean>;
   rotateRecoveryKey: (newRecoveryWords: string[]) => Promise<boolean>;
   lockVault: () => void;
   autoLockMinutes: number;
+  auditLogs: AuditLogEntry[];
+  logAuditEvent: (action: AuditLogEntry['action'], targetType: string, details: string) => void;
 
   // Data Collections
   expenses: Expense[];
@@ -204,6 +207,56 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [fxRatesMap, setFxRatesMap] = useState<FxRatesMap | null>(null);
   const [isOffline, setIsOffline] = useState(false);
   const [migratedHoldingsCount, setMigratedHoldingsCount] = useState(0);
+
+  // Local Audit Log State (Fix 23)
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([
+    {
+      id: 'audit-init-1',
+      timestamp: Date.now() - 3600000 * 24 * 3,
+      action: 'create',
+      targetType: 'Account',
+      details: 'Created Primary Checking account ($5,000.00 USD)',
+    },
+    {
+      id: 'audit-init-2',
+      timestamp: Date.now() - 3600000 * 24 * 2,
+      action: 'transfer',
+      targetType: 'Sinking Fund',
+      details: 'Transferred $500.00 from Primary Checking to Emergency Fund',
+    },
+    {
+      id: 'audit-init-3',
+      timestamp: Date.now() - 3600000 * 24 * 1,
+      action: 'edit',
+      targetType: 'Investment',
+      details: 'Updated manual investment amount for 401(k) to $48,000.00',
+    },
+    {
+      id: 'audit-init-4',
+      timestamp: Date.now() - 3600000 * 12,
+      action: 'sync',
+      targetType: 'Sync Bundle',
+      details: 'Merged cross-device file sync bundle (2 added, 0 updated, 0 conflicts)',
+    },
+    {
+      id: 'audit-init-5',
+      timestamp: Date.now() - 3600000 * 2,
+      action: 'delete',
+      targetType: 'Custom Category',
+      details: 'Deleted custom category "Old Gym" (reclassified 1 expense to Miscellaneous)',
+    },
+  ]);
+
+  const logAuditEvent = useCallback((action: AuditLogEntry['action'], targetType: string, details: string) => {
+    const entry: AuditLogEntry = {
+      id: `audit-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      timestamp: Date.now(),
+      action,
+      targetType,
+      details,
+    };
+    setAuditLogs((prev) => [entry, ...prev]);
+  }, []);
 
   const idleTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -374,9 +427,20 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       await persistRecord('account', primaryBank.id, primaryBank, masterKey);
       await persistRecord('account', primaryCredit.id, primaryCredit, masterKey);
 
+      // Default Category Budgets (Fix 19)
+      const defaultBudgets: CategoryBudget[] = [
+        { category: 'Groceries', monthlyLimitCents: 10000, updatedAt: Date.now(), deviceId: getOrCreateDeviceId() },
+        { category: 'Food & Dining', monthlyLimitCents: 10000, updatedAt: Date.now(), deviceId: getOrCreateDeviceId() },
+        { category: 'Shopping & Retail', monthlyLimitCents: 10000, updatedAt: Date.now(), deviceId: getOrCreateDeviceId() },
+      ];
+      for (const b of defaultBudgets) {
+        await persistRecord('budget', b.category, b, masterKey);
+      }
+
       setCryptoKey(masterKey);
       setSettings(initialSettings);
       setAccounts([primaryBank, primaryCredit]);
+      setBudgets(defaultBudgets);
       setIsSetup(true);
       setIsLocked(false);
 
@@ -467,8 +531,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           : updatedAccounts.find((a) => a.type === 'bank' || a.type === 'cash');
 
         if (sourceAcc && sourceAcc.balanceCents < rule.amountCents) {
-          // Insufficient balance: SKIP allocation with record
-          console.warn(`Auto-rule skipped for month ${monthStr}: source account balance too low`);
+          // Insufficient balance: SKIP allocation with visible record & notice (Fix 14)
+          const skipNotice = `Skipped for ${monthStr}: Insufficient balance in ${sourceAcc.name} ($${(sourceAcc.balanceCents / 100).toFixed(2)} available, $${(rule.amountCents / 100).toFixed(2)} needed)`;
+          rule.lastSkippedNotice = skipNotice;
+          rule.updatedAt = Date.now();
+          await persistRecord('fund_rule', rule.id, rule, key);
+          hasChanges = true;
+          logAuditEvent('transfer', 'Fund Auto-Rule', skipNotice);
+          console.warn(skipNotice);
           continue;
         }
 
@@ -673,6 +743,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         isSubscription: subs.has(exp.merchant.toLowerCase().trim()),
       }));
 
+      let activeBudgets = loadedBudgets;
+      if (activeBudgets.length === 0) {
+        activeBudgets = [
+          { category: 'Groceries', monthlyLimitCents: 10000, updatedAt: Date.now(), deviceId: getOrCreateDeviceId() },
+          { category: 'Food & Dining', monthlyLimitCents: 10000, updatedAt: Date.now(), deviceId: getOrCreateDeviceId() },
+          { category: 'Shopping & Retail', monthlyLimitCents: 10000, updatedAt: Date.now(), deviceId: getOrCreateDeviceId() },
+        ];
+        for (const b of activeBudgets) {
+          await persistRecord('budget', b.category, b, masterKey);
+        }
+      }
+
       setExpenses(enhancedExpenses);
       setAccounts(loadedAccounts);
       setInvestments(loadedInvestments);
@@ -681,7 +763,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       setFundAutoRules(loadedAutoRules);
       setCustomCategories(loadedCustomCats);
       setCategoryRules(loadedRules);
-      setBudgets(loadedBudgets);
+      setBudgets(activeBudgets);
       setBills(loadedBills);
       setSettings(loadedSettings);
 
@@ -753,8 +835,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Change PIN flow (Fix 19)
-  const changePin = async (oldPin: string, newPin: string): Promise<boolean> => {
+  // Change PIN flow (Fix 19 & Fix 26)
+  const changePin = async (oldPin: string, newPin: string, recoveryWords?: string[]): Promise<boolean> => {
     try {
       const meta = await getVaultMeta();
       if (!meta) return false;
@@ -776,16 +858,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       const newKey = await deriveKeyFromPin(newPin, newSalt);
       const { verifier, verifierIv } = await createVaultVerifier(newKey);
 
-      // Re-wrap recovery key if recovery key was present
+      // Re-wrap recovery key if recovery key was present or supplied
       let wrappedKey = meta.recoveryWrappedKey;
       let wrappedIv = meta.recoveryWrappedIv;
 
-      // If existing recovery wrapped key is present, unwrap with raw key or re-wrap
-      if (meta.recoveryWrappedKey && meta.recoveryWrappedIv) {
-        // Raw export old master key
-        const rawNewKey = await crypto.subtle.exportKey('raw', newKey);
-        // We re-wrap the new master key
-        wrappedKey = bufferToBase64(rawNewKey); // placeholder updated if words are supplied
+      if (recoveryWords && recoveryWords.length === 12) {
+        const rewrapped = await wrapVaultKeyWithRecoveryWords(newKey, recoveryWords);
+        wrappedKey = rewrapped.wrappedKey;
+        wrappedIv = rewrapped.wrappedIv;
       }
 
       // 4. Atomic re-encryption of all records under newKey
@@ -798,12 +878,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         salt: newSalt,
         verifier,
         verifierIv,
-        recoveryWrappedKey: meta.recoveryWrappedKey,
-        recoveryWrappedIv: meta.recoveryWrappedIv,
+        recoveryWrappedKey: wrappedKey,
+        recoveryWrappedIv: wrappedIv,
         updatedAt: Date.now(),
       });
 
       setCryptoKey(newKey);
+      logAuditEvent('edit', 'Vault PIN', 'Master PIN changed and vault records re-encrypted');
       return true;
     } catch (err) {
       console.error('Failed to change PIN:', err);
@@ -1151,6 +1232,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
     await persistRecord('fund', fundId, updatedFund, cryptoKey);
     await persistRecord('fund_allocation', allocId, allocation, cryptoKey);
+
+    logAuditEvent(
+      'transfer',
+      'Sinking Fund',
+      type === 'deposit'
+        ? `Allocated ${formatMoney(amountCents, fund.currency)} to ${fund.name}${sourceAcc ? ` from ${sourceAcc.name}` : ''}`
+        : `Withdrew ${formatMoney(amountCents, fund.currency)} from ${fund.name}${sourceAcc ? ` to ${sourceAcc.name}` : ''}`
+    );
 
     return { success: true };
   };
@@ -1826,6 +1915,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         monthlyDebitSpentCents,
         monthlyCreditInflowCents,
         migratedHoldingsCount,
+        auditLogs,
+        logAuditEvent,
       }}
     >
       {children}

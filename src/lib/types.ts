@@ -86,8 +86,17 @@ export interface FundAutoRule {
   dayOfMonth: number; // 1 - 31
   active: boolean;
   lastAppliedDate?: string; // YYYY-MM-DD
+  lastSkippedNotice?: string; // Visible notice if rule skipped due to insufficient balance
   updatedAt: number;
   deviceId?: string;
+}
+
+export interface AuditLogEntry {
+  id: string;
+  timestamp: number;
+  action: 'create' | 'edit' | 'delete' | 'transfer' | 'sync';
+  targetType: string;
+  details: string;
 }
 
 export interface CustomCategory {

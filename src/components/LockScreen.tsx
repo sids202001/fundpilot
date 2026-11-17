@@ -402,7 +402,8 @@ export function LockScreen() {
                     required
                     value={verifyInputs[idx] || ''}
                     onChange={(e) => {
-                      setVerifyInputs({ ...verifyInputs, [idx]: e.target.value });
+                      const val = e.target.value;
+                      setVerifyInputs((prev) => ({ ...prev, [idx]: val }));
                       setError(null);
                     }}
                     placeholder={`e.g. ${recoveryWords[idx] ? 'correct word' : ''}`}

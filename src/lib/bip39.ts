@@ -224,7 +224,7 @@ export function generateRecoveryKey(): string[] {
 export function selectVerificationIndices(): number[] {
   const indices = new Set<number>();
   while (indices.size < 3) {
-    const r = Math.floor(Math.random() * 12) + 1;
+    const r = Math.floor(Math.random() * 12);
     indices.add(r);
   }
   return Array.from(indices).sort((a, b) => a - b);

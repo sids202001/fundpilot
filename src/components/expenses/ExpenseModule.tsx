@@ -819,13 +819,25 @@ export function ExpenseModule({ filterCategory }: { filterCategory?: string | nu
                   </div>
 
                   {limitCents > 0 && (
-                    <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-[#1e222b]">
-                      <div
-                        className={`h-full rounded-full transition-all ${
-                          pct >= 100 ? 'bg-loss' : pct >= 80 ? 'bg-amber-400' : 'bg-gold'
-                        }`}
-                        style={{ width: `${pct}%` }}
-                      />
+                    <div className="mt-2 space-y-1">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className={`font-semibold ${
+                          pct >= 100 ? 'text-rose-400' : pct >= 80 ? 'text-amber-400' : 'text-emerald-400'
+                        }`}>
+                          {pct}% used
+                        </span>
+                        <span className="text-[#9e9a93]">
+                          {pct >= 100 ? 'Over Budget' : `${formatMoney(Math.max(0, limitCents - spentCurrent), displayCurrency || 'USD')} left`}
+                        </span>
+                      </div>
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-[#1e222b]">
+                        <div
+                          className={`h-full rounded-full transition-all ${
+                            pct >= 100 ? 'bg-rose-500' : pct >= 80 ? 'bg-amber-400' : 'bg-emerald-400'
+                          }`}
+                          style={{ width: `${Math.min(100, pct)}%` }}
+                        />
+                      </div>
                     </div>
                   )}
 
