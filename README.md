@@ -1,5 +1,7 @@
 # 🧭 FundPilot — Local-First Personal Finance Tracker
 
+🚀 Live Demo: https://fundpilot-ten.vercel.app
+
 <p align="left">
   <a href="https://nextjs.org/"><img src="https://img.shields.io/badge/Next.js-14+-000000" alt="Next.js" /></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-3178C6" alt="TypeScript" /></a>
