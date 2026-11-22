@@ -42,6 +42,9 @@ export function Dashboard2D({
     accounts,
     fxRatesMap,
     netWorthUnconverted,
+    hideAmounts,
+    displayMoney,
+    displayPercent,
   } = useStore();
 
   const rates = fxRatesMap?.rates || {};
@@ -115,7 +118,7 @@ export function Dashboard2D({
             <div>
               <h3 className="text-sm font-semibold text-[#f5f3ef]">Net Worth Composition</h3>
               <p className="text-xs text-[#9e9a93]">
-                Total Net Worth: {formatMoney(totalNetWorthCents, displayCurrency)}
+                Total Net Worth: {displayMoney(totalNetWorthCents, displayCurrency)}
                 {netWorthUnconverted.length > 0 ? ` * (Partial: ${netWorthUnconverted.join(', ')})` : ''}
               </p>
             </div>
@@ -129,25 +132,25 @@ export function Dashboard2D({
             <div>
               <span className="text-[#9e9a93]">1. Bank Cash:</span>{' '}
               <span className="font-semibold text-gold-light font-mono">
-                {formatMoney(totalBankCashCents, displayCurrency)}
+                {displayMoney(totalBankCashCents, displayCurrency)}
               </span>
             </div>
             <div>
               <span className="text-[#9e9a93]">2. Sinking Funds:</span>{' '}
               <span className="font-semibold text-gold font-mono">
-                {formatMoney(totalFundsCents, displayCurrency)}
+                {displayMoney(totalFundsCents, displayCurrency)}
               </span>
             </div>
             <div>
               <span className="text-[#9e9a93]">3. Investments:</span>{' '}
               <span className="font-semibold text-[#c8c4bc] font-mono">
-                {formatMoney(totalInvestmentsCents, displayCurrency)}
+                {displayMoney(totalInvestmentsCents, displayCurrency)}
               </span>
             </div>
             <div>
               <span className="text-[#9e9a93]">4. Credit Owed:</span>{' '}
               <span className="font-semibold text-rose-400 font-mono">
-                -{formatMoney(totalCreditOwedCents, displayCurrency)}
+                {hideAmounts ? '' : '-'}{displayMoney(totalCreditOwedCents, displayCurrency)}
               </span>
             </div>
           </div>
@@ -171,7 +174,7 @@ export function Dashboard2D({
                   </Pie>
                   <Tooltip
                     formatter={(val: number) => [
-                      formatMoney(parseToSmallestUnit(val, displayCurrency), displayCurrency),
+                      displayMoney(parseToSmallestUnit(val, displayCurrency), displayCurrency),
                       'Total',
                     ]}
                     contentStyle={{
@@ -184,7 +187,7 @@ export function Dashboard2D({
                   <Legend
                     formatter={(value, entry: any) => (
                       <span className="text-xs text-[#9e9a93]">
-                        {value}: {formatMoney(parseToSmallestUnit(entry.payload.value, displayCurrency), displayCurrency)}
+                        {value}: {displayMoney(parseToSmallestUnit(entry.payload.value, displayCurrency), displayCurrency)}
                       </span>
                     )}
                   />
@@ -192,7 +195,7 @@ export function Dashboard2D({
               </ResponsiveContainer>
             ) : (
               <div className="flex h-full flex-col items-center justify-center text-xs text-[#9e9a93]">
-                <p>{formatMoney(0, displayCurrency)} Total Net Worth</p>
+                <p>{displayMoney(0, displayCurrency)} Total Net Worth</p>
                 <p className="mt-1 text-[11px]">Add accounts, funds, or investments to populate</p>
               </div>
             )}
@@ -226,11 +229,11 @@ export function Dashboard2D({
                 <YAxis
                   stroke="#716c64"
                   fontSize={11}
-                  tickFormatter={(val) => `${val}`}
+                  tickFormatter={(val) => (hideAmounts ? '••' : `${val}`)}
                 />
                 <Tooltip
                   formatter={(val: number, name: string, props: any) => [
-                    formatMoney(parseToSmallestUnit(val, displayCurrency), displayCurrency),
+                    displayMoney(parseToSmallestUnit(val, displayCurrency), displayCurrency),
                     'Debit Spend',
                   ]}
                   contentStyle={{
@@ -282,11 +285,11 @@ export function Dashboard2D({
                   layout="vertical"
                   margin={{ left: 20, right: 20, top: 10, bottom: 10 }}
                 >
-                  <XAxis type="number" stroke="#716c64" fontSize={11} />
+                  <XAxis type="number" stroke="#716c64" fontSize={11} tickFormatter={(val) => (hideAmounts ? '••' : `${val}`)} />
                   <YAxis type="category" dataKey="category" stroke="#716c64" fontSize={11} width={110} />
                   <Tooltip
                     formatter={(v: number) => [
-                      formatMoney(parseToSmallestUnit(v, displayCurrency), displayCurrency),
+                      displayMoney(parseToSmallestUnit(v, displayCurrency), displayCurrency),
                       'Spent',
                     ]}
                     contentStyle={{
@@ -319,7 +322,7 @@ export function Dashboard2D({
             <div>
               <h3 className="text-sm font-semibold text-[#f5f3ef]">Investments (Manual Totals)</h3>
               <p className="text-xs text-[#9e9a93]">
-                Total: {formatMoney(totalInvestmentsCents, displayCurrency)}
+                Total: {displayMoney(totalInvestmentsCents, displayCurrency)}
               </p>
             </div>
             <span className="text-xs text-[#9e9a93]">{investments.length} Entries</span>
@@ -345,7 +348,7 @@ export function Dashboard2D({
                     </div>
                   </div>
                   <div className="font-semibold text-gold-light font-mono">
-                    {formatMoney(item.amountCents, item.currency)}
+                    {displayMoney(item.amountCents, item.currency)}
                   </div>
                 </div>
               ))}
@@ -383,7 +386,7 @@ export function Dashboard2D({
                     <div className="flex items-center justify-between text-xs">
                       <span className="font-semibold text-[#f5f3ef]">{f.name}</span>
                       <span className="text-gold-light font-medium font-mono">
-                        {formatMoney(f.currentAmountCents, f.currency)} / {formatMoney(f.targetAmountCents, f.currency)} ({pct}%)
+                        {displayMoney(f.currentAmountCents, f.currency)} / {displayMoney(f.targetAmountCents, f.currency)} ({displayPercent(pct)})
                       </span>
                     </div>
                     <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-[#1e222b]">

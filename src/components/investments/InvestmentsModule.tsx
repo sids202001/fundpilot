@@ -37,6 +37,7 @@ export function InvestmentsModule({ selectedId }: { selectedId?: string | null }
     totalInvestmentsCents,
     displayCurrency,
     fxRatesMap,
+    displayMoney,
   } = useStore();
 
   // Modals
@@ -133,7 +134,7 @@ export function InvestmentsModule({ selectedId }: { selectedId?: string | null }
           <div>
             <span className="text-xs font-semibold uppercase tracking-wider text-gold">Total Investments</span>
             <div className="mt-2 text-3xl font-extrabold tracking-tight text-[#f5f3ef]">
-              {formatMoney(totalInvestmentsCents, displayCurrency)}
+              {displayMoney(totalInvestmentsCents, displayCurrency)}
             </div>
             <p className="mt-2 text-[11px] text-[#9e9a93]">
               Sum of all manual asset balances • Converted to {displayCurrency} using verified exchange rates
@@ -184,7 +185,7 @@ export function InvestmentsModule({ selectedId }: { selectedId?: string | null }
                 <div className="flex items-center justify-between sm:justify-end gap-4">
                   <div className="text-right">
                     <div className="text-base font-bold text-gold-light font-mono">
-                      {formatMoney(entry.amountCents, entry.currency)}
+                      {displayMoney(entry.amountCents, entry.currency)}
                     </div>
                     {entry.currency !== displayCurrency && (
                       <div className="text-[10px] text-[#9e9a93]">

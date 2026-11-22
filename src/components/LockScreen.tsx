@@ -312,7 +312,7 @@ export function LockScreen() {
                 type="button"
                 disabled={isLoading || confirmPin.length < 4}
                 onClick={handlePinSubmitToWords}
-                className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-gold to-gold-light py-3 text-sm font-semibold text-[#0b0d10] shadow-[0_0_20px_rgba(212,175,55,0.3)] transition-all hover:brightness-110 disabled:opacity-50"
+                className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-gold to-gold-light py-3 text-sm font-semibold text-[#0b0d10] shadow-[0_0_20px_rgba(212,175,55,0.3)] transition-all hover:brightness-110 disabled:opacity-65 disabled:cursor-not-allowed"
               >
                 <CheckCircle2 className="h-4 w-4" />
                 Next: Generate Recovery Key
@@ -425,7 +425,7 @@ export function LockScreen() {
                 type="button"
                 disabled={isLoading}
                 onClick={handleFinalSetupSubmit}
-                className="flex-1 rounded-xl bg-gradient-to-r from-gold to-gold-light py-2.5 text-xs font-semibold text-[#0b0d10] shadow-[0_0_20px_rgba(212,175,55,0.3)] hover:brightness-110 disabled:opacity-50"
+                className="flex-1 rounded-xl bg-gradient-to-r from-gold to-gold-light py-2.5 text-xs font-semibold text-[#0b0d10] shadow-[0_0_20px_rgba(212,175,55,0.3)] hover:brightness-110 disabled:opacity-65 disabled:cursor-not-allowed"
               >
                 {isLoading ? 'Encrypting...' : 'Initialize Vault'}
               </button>
@@ -504,7 +504,7 @@ export function LockScreen() {
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="rounded-xl bg-gradient-to-r from-gold to-gold-light px-4 py-2 text-xs font-semibold text-[#0b0d10] hover:brightness-110 disabled:opacity-50"
+                  className="rounded-xl bg-gradient-to-r from-gold to-gold-light px-4 py-2 text-xs font-semibold text-[#0b0d10] hover:brightness-110 disabled:opacity-65 disabled:cursor-not-allowed"
                 >
                   {isLoading ? 'Recovering...' : 'Unwrap Key & Unlock'}
                 </button>

@@ -299,13 +299,11 @@ function AmbientWarmDust({
 // 4. Central Net Worth Core (Champagne Gold Faceted Core)
 // ============================================================================
 function NetWorthCore({
-  totalNetWorthCents,
-  displayCurrency,
+  formattedNetWorth,
   reducedMotion,
   isDimmed,
 }: {
-  totalNetWorthCents: number;
-  displayCurrency: string;
+  formattedNetWorth: string;
   reducedMotion: boolean;
   isDimmed: boolean;
 }) {
@@ -332,7 +330,7 @@ function NetWorthCore({
     }
   });
 
-  const formattedStr = formatMoney(totalNetWorthCents, displayCurrency);
+  const formattedStr = formattedNetWorth;
 
   return (
     <group position={[0, 0, 0]}>
@@ -667,6 +665,9 @@ export function FinanceScene({
     displayCurrency,
     rates,
     settings,
+    hideAmounts,
+    displayMoney,
+    displayPercent,
   } = useStore();
 
   const [focusMode, setFocusMode] = useState<SceneFocusMode>('overview');
@@ -740,7 +741,7 @@ export function FinanceScene({
               </span>
             </div>
             <span className="text-[10px] text-[#9e9a93] font-mono">
-              Net Worth: {formatMoney(totalNetWorthCents, displayCurrency)}
+              Net Worth: {displayMoney(totalNetWorthCents, displayCurrency)}
               {netWorthUnconverted.length > 0 ? ` * (Partial: ${netWorthUnconverted.join(', ')})` : ''}
             </span>
           </div>
@@ -748,19 +749,19 @@ export function FinanceScene({
           {/* 4-Bucket Summary Strip */}
           <div className="mt-2.5 flex flex-wrap items-center gap-2 text-[11px] text-[#c8c4bc] border-t border-[#1e222b] pt-2">
             <span>
-              1. Cash: <strong className="text-[#e5c07b]">{formatMoney(totalBankCashCents, displayCurrency)}</strong>
+              1. Cash: <strong className="text-[#e5c07b]">{displayMoney(totalBankCashCents, displayCurrency)}</strong>
             </span>
             <span className="text-[#3a3f4d]">•</span>
             <span>
-              2. Funds: <strong className="text-gold-light">{formatMoney(totalFundsCents, displayCurrency)}</strong>
+              2. Funds: <strong className="text-gold-light">{displayMoney(totalFundsCents, displayCurrency)}</strong>
             </span>
             <span className="text-[#3a3f4d]">•</span>
             <span>
-              3. Inv: <strong className="text-gain">{formatMoney(totalInvestmentsCents, displayCurrency)}</strong>
+              3. Inv: <strong className="text-gain">{displayMoney(totalInvestmentsCents, displayCurrency)}</strong>
             </span>
             <span className="text-[#3a3f4d]">•</span>
             <span>
-              4. Credit: <strong className="text-loss">-{formatMoney(totalCreditOwedCents, displayCurrency)}</strong>
+              4. Credit: <strong className="text-loss">{hideAmounts ? '' : '-'}{displayMoney(totalCreditOwedCents, displayCurrency)}</strong>
             </span>
           </div>
 
@@ -873,11 +874,11 @@ export function FinanceScene({
           <div className="grid grid-cols-2 gap-2 border-t border-[#1e222b] pt-1.5 text-[10px] font-mono">
             <div>
               <span className="text-[#9e9a93]">Safe-to-Spend:</span>
-              <p className="font-bold text-gain">{formatMoney(safeToSpendMonthCents, displayCurrency)}</p>
+              <p className="font-bold text-gain">{displayMoney(safeToSpendMonthCents, displayCurrency)}</p>
             </div>
             <div>
               <span className="text-[#9e9a93]">Net Worth:</span>
-              <p className="font-bold text-[#f5f3ef]">{formatMoney(totalNetWorthCents, displayCurrency)}</p>
+              <p className="font-bold text-[#f5f3ef]">{displayMoney(totalNetWorthCents, displayCurrency)}</p>
             </div>
           </div>
         </div>
@@ -931,8 +932,7 @@ export function FinanceScene({
         {/* 2. Net Worth Core */}
         {focusMode !== 'mascot-close' && (
           <NetWorthCore
-            totalNetWorthCents={totalNetWorthCents}
-            displayCurrency={displayCurrency}
+            formattedNetWorth={displayMoney(totalNetWorthCents, displayCurrency)}
             reducedMotion={isReducedMotion}
             isDimmed={focusMode !== 'overview'}
           />
@@ -959,7 +959,7 @@ export function FinanceScene({
                 isDimmed={focusMode !== 'overview' && focusMode !== 'funds'}
                 onClick={() => {
                   setSelectedInfo(
-                    `Fund: ${fund.name} — ${formatMoney(fund.currentAmountCents, fund.currency)} of ${formatMoney(fund.targetAmountCents, fund.currency)} (${(ratio * 100).toFixed(0)}%)`
+                    `Fund: ${fund.name} — ${displayMoney(fund.currentAmountCents, fund.currency)} of ${displayMoney(fund.targetAmountCents, fund.currency)} (${displayPercent((ratio * 100).toFixed(0))})`
                   );
                   onSelectFund(fund.id);
                 }}
@@ -983,7 +983,7 @@ export function FinanceScene({
                 isDimmed={focusMode !== 'overview' && focusMode !== 'expenses'}
                 onClick={() => {
                   setSelectedInfo(
-                    `Category: ${cat} — ${formatMoney(cents, displayCurrency)} spent this month`
+                    `Category: ${cat} — ${displayMoney(cents, displayCurrency)} spent this month`
                   );
                   onSelectCategory(cat);
                 }}
@@ -1014,7 +1014,7 @@ export function FinanceScene({
                 isDimmed={focusMode !== 'overview' && focusMode !== 'investments'}
                 onClick={() => {
                   setSelectedInfo(
-                    `Investment: ${inv.label || inv.type} — ${formatMoney(inv.amountCents, inv.currency)} (Updated: ${inv.lastUpdated})`
+                    `Investment: ${inv.label || inv.type} — ${displayMoney(inv.amountCents, inv.currency)} (Updated: ${inv.lastUpdated})`
                   );
                   onSelectInvestment(inv.id);
                 }}

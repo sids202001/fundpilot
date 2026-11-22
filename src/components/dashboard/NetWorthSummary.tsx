@@ -26,6 +26,9 @@ export function NetWorthSummary() {
     expenses,
     fundAllocations,
     displayCurrency,
+    hideAmounts,
+    displayMoney,
+    displayPercent,
   } = useStore();
 
   const [isEditingSettings, setIsEditingSettings] = useState(false);
@@ -106,7 +109,7 @@ export function NetWorthSummary() {
           </div>
           <div className="mt-3 flex items-baseline gap-2">
             <span className="text-3xl font-extrabold tracking-tight text-[#f5f3ef]">
-              {formatMoney(totalNetWorthCents, displayCurrency || 'USD')}
+              {displayMoney(totalNetWorthCents, displayCurrency || 'USD')}
             </span>
             {netWorthUnconverted.length > 0 && (
               <span
@@ -118,13 +121,13 @@ export function NetWorthSummary() {
             )}
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-1.5 text-[11px] text-[#9e9a93]">
-            <span>Cash: <strong className="text-[#e5c07b]">{formatMoney(totalBankCashCents, displayCurrency || 'USD')}{bankCashUnconverted.length > 0 ? '*' : ''}</strong></span>
+            <span>Cash: <strong className="text-[#e5c07b]">{displayMoney(totalBankCashCents, displayCurrency || 'USD')}{bankCashUnconverted.length > 0 ? '*' : ''}</strong></span>
             <span className="text-[#3a3f4d]">•</span>
-            <span>Funds: <strong className="text-[#d4af37]">{formatMoney(totalFundsCents, displayCurrency || 'USD')}{fundsUnconverted.length > 0 ? '*' : ''}</strong></span>
+            <span>Funds: <strong className="text-[#d4af37]">{displayMoney(totalFundsCents, displayCurrency || 'USD')}{fundsUnconverted.length > 0 ? '*' : ''}</strong></span>
             <span className="text-[#3a3f4d]">•</span>
-            <span>Inv: <strong className="text-gain">{formatMoney(totalInvestmentsCents, displayCurrency || 'USD')}{investmentsUnconverted.length > 0 ? '*' : ''}</strong></span>
+            <span>Inv: <strong className="text-gain">{displayMoney(totalInvestmentsCents, displayCurrency || 'USD')}{investmentsUnconverted.length > 0 ? '*' : ''}</strong></span>
             <span className="text-[#3a3f4d]">•</span>
-            <span>Credit: <strong className="text-loss">-{formatMoney(totalCreditOwedCents, displayCurrency || 'USD')}{creditOwedUnconverted.length > 0 ? '*' : ''}</strong></span>
+            <span>Credit: <strong className="text-loss">{hideAmounts ? '' : '-'}{displayMoney(totalCreditOwedCents, displayCurrency || 'USD')}{creditOwedUnconverted.length > 0 ? '*' : ''}</strong></span>
           </div>
           <div className="absolute right-0 top-0 h-1 w-full bg-gradient-to-r from-[#d4af37] via-[#f3d99b] to-[#b8860b]" />
         </div>
@@ -139,7 +142,7 @@ export function NetWorthSummary() {
           </div>
           <div className="mt-3 flex items-baseline gap-2">
             <span className="text-3xl font-extrabold tracking-tight text-[#4ade80]">
-              {formatMoney(safeToSpendMonthCents, displayCurrency || 'USD')}
+              {displayMoney(safeToSpendMonthCents, displayCurrency || 'USD')}
             </span>
             {safeToSpendUnconverted.length > 0 && (
               <span
@@ -164,15 +167,15 @@ export function NetWorthSummary() {
             <span className="font-semibold uppercase tracking-wider text-[#f5f3ef]">Monthly Cash Flow</span>
             <div className="flex items-center gap-1 rounded-full bg-[#22c55e]/10 px-2 py-0.5 text-[10px] font-medium text-[#4ade80] border border-[#22c55e]/25">
               <ArrowUpRight className="h-3 w-3" />
-              <span>{savingsRatePct}% Saved</span>
+              <span>{displayPercent(savingsRatePct)} Saved</span>
             </div>
           </div>
           <div className="mt-3 text-3xl font-extrabold tracking-tight text-[#f5f3ef]">
-            {formatMoney(netSavedMonthCents, displayCurrency || 'USD')}
+            {displayMoney(netSavedMonthCents, displayCurrency || 'USD')}
           </div>
           <div className="mt-4 flex items-center justify-between text-[11px] text-[#9e9a93]">
-            <span>Inflows: {formatMoney(totalMonthlyInflowsCents, displayCurrency || 'USD')}</span>
-            <span>Outflows: {formatMoney(totalMonthlyOutflowCents, displayCurrency || 'USD')}</span>
+            <span>Inflows: {displayMoney(totalMonthlyInflowsCents, displayCurrency || 'USD')}</span>
+            <span>Outflows: {displayMoney(totalMonthlyOutflowCents, displayCurrency || 'USD')}</span>
           </div>
           <div className="absolute right-0 top-0 h-1 w-full bg-[#d4af37]" />
         </div>
@@ -186,7 +189,7 @@ export function NetWorthSummary() {
             </span>
           </div>
           <div className="mt-3 text-3xl font-extrabold tracking-tight text-[#f3d99b]">
-            {formatMoney(totalFundsCents, displayCurrency || 'USD')}
+            {displayMoney(totalFundsCents, displayCurrency || 'USD')}
           </div>
           <p className="mt-4 text-[11px] text-[#9e9a93]">
             Segregated from spendable cash across all sinking funds
@@ -212,11 +215,11 @@ export function NetWorthSummary() {
           <Calculator className="h-3.5 w-3.5 text-[#d4af37]" />
           <span className="font-semibold text-[#f5f3ef]">Net Worth Formula:</span>
           <span>
-            <span className="text-[#e5c07b] font-medium">Bank/Cash ({formatMoney(totalBankCashCents, displayCurrency || 'USD')})</span> +{' '}
-            <span className="text-[#d4af37] font-medium">Sinking Funds ({formatMoney(totalFundsCents, displayCurrency || 'USD')})</span> +{' '}
-            <span className="text-gain font-medium">Investments ({formatMoney(totalInvestmentsCents, displayCurrency || 'USD')})</span> −{' '}
-            <span className="text-loss font-medium">Credit Debt ({formatMoney(totalCreditOwedCents, displayCurrency || 'USD')})</span> ={' '}
-            <strong className="text-[#f5f3ef]">{formatMoney(totalNetWorthCents, displayCurrency || 'USD')}</strong>
+            <span className="text-[#e5c07b] font-medium">Bank/Cash ({displayMoney(totalBankCashCents, displayCurrency || 'USD')})</span> +{' '}
+            <span className="text-[#d4af37] font-medium">Sinking Funds ({displayMoney(totalFundsCents, displayCurrency || 'USD')})</span> +{' '}
+            <span className="text-gain font-medium">Investments ({displayMoney(totalInvestmentsCents, displayCurrency || 'USD')})</span> −{' '}
+            <span className="text-loss font-medium">Credit Debt ({displayMoney(totalCreditOwedCents, displayCurrency || 'USD')})</span> ={' '}
+            <strong className="text-[#f5f3ef]">{displayMoney(totalNetWorthCents, displayCurrency || 'USD')}</strong>
           </span>
         </div>
         <span className="text-[10px] text-[#716c64] font-mono">

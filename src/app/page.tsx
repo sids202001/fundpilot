@@ -74,7 +74,7 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0b0d10] text-[#f5f3ef] flex flex-col font-sans">
+    <div className="min-h-screen w-full max-w-full overflow-x-clip bg-[#0b0d10] text-[#f5f3ef] flex flex-col font-sans">
       {/* Top Navbar */}
       <Navbar
         activeTab={activeTab}
@@ -82,7 +82,7 @@ export default function Home() {
       />
 
       {/* Main Content Area */}
-      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 sm:px-6 space-y-6">
+      <main className="mx-auto w-full min-w-0 max-w-7xl flex-1 px-4 py-6 sm:px-6 space-y-6">
         {/* Universal Financial Summary Headline (Shown on Dashboard) */}
         {activeTab === 'dashboard' && <NetWorthSummary />}
 

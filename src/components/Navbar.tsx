@@ -15,6 +15,8 @@ import {
   WifiOff,
   Settings,
   Coins,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 
 export type AppNavTab = 'dashboard' | 'expenses' | 'funds' | 'investments' | 'settings';
@@ -26,28 +28,28 @@ interface NavbarProps {
 }
 
 export function Navbar({ activeTab, setActiveTab }: NavbarProps) {
-  const { lockVault, settings, updateSettings, fxRate, isOffline, displayCurrency } = useStore();
+  const { lockVault, settings, updateSettings, fxRate, isOffline, hideAmounts, toggleHideAmounts } = useStore();
 
   const toggle2D = () => {
     updateSettings({ prefer2D: !settings.prefer2D });
   };
 
   return (
-    <header className="sticky top-0 z-40 border-b border-[#1e222b] bg-[#0e1014]/90 backdrop-blur-md">
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-2.5 sm:px-6">
+    <header className="sticky top-0 z-40 w-full border-b border-[#1e222b] bg-[#0e1014]/90 backdrop-blur-md">
+      <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-2 px-3 py-2.5 sm:px-6">
         {/* Brand */}
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-tr from-[#d4af37] via-[#e5c07b] to-[#b8860b] text-[#0b0d10] shadow-md shadow-[#d4af37]/20">
+        <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-[#d4af37] via-[#e5c07b] to-[#b8860b] text-[#0b0d10] shadow-md shadow-[#d4af37]/20">
             <Compass className="h-5 w-5 font-bold" />
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-1.5">
               <span className="font-bold tracking-tight text-[#f5f3ef]">FundPilot</span>
-              <span className="rounded-full bg-[#d4af37]/10 px-1.5 py-0.5 text-[10px] font-medium text-[#d4af37] border border-[#d4af37]/25">
+              <span className="hidden sm:inline-block rounded-full bg-[#d4af37]/10 px-1.5 py-0.5 text-[10px] font-medium text-[#d4af37] border border-[#d4af37]/25">
                 Local-First
               </span>
             </div>
-            <p className="text-[10px] text-[#9e9a93]">Zero-Tracking • AES-256 Encrypted</p>
+            <p className="hidden sm:block text-[10px] text-[#9e9a93]">Zero-Tracking • AES-256 Encrypted</p>
           </div>
         </div>
 
@@ -111,28 +113,45 @@ export function Navbar({ activeTab, setActiveTab }: NavbarProps) {
         </nav>
 
         {/* Right side controls */}
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
           {/* FX Pill */}
           {fxRate && (
-            <div className="hidden lg:flex items-center gap-1.5 rounded-lg border border-[#1e222b] bg-[#111419]/75 px-2.5 py-1 text-[11px] text-[#f5f3ef]">
+            <div className="hidden xl:flex items-center gap-1.5 rounded-lg border border-[#1e222b] bg-[#111419]/75 px-2.5 py-1 text-[11px] text-[#f5f3ef]">
               <Coins className="h-3.5 w-3.5 text-[#d4af37]" />
               <span>$1 = ₹{fxRate.rate.toFixed(2)}</span>
               <span className="text-[9px] text-[#9e9a93]">{fxRate.asOfDate ? `(${fxRate.asOfDate})` : '(date unknown)'}</span>
             </div>
           )}
 
+          {/* Global Privacy Eye Toggle (Hide / Show All Money Amounts App-Wide) */}
+          <button
+            type="button"
+            onClick={toggleHideAmounts}
+            aria-label={hideAmounts ? 'Show all amounts' : 'Hide all amounts'}
+            aria-pressed={hideAmounts}
+            title={hideAmounts ? 'Show all amounts (Privacy Mode Active)' : 'Hide all amounts (Privacy Mode)'}
+            className={`flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs font-medium transition-all ${
+              hideAmounts
+                ? 'border-[#d4af37]/60 bg-[#d4af37]/20 text-[#f3d99b] shadow-sm'
+                : 'border-[#262930] bg-[#111419]/85 text-[#f5f3ef] hover:border-[#d4af37]/40 hover:text-[#f3d99b]'
+            }`}
+          >
+            {hideAmounts ? <EyeOff className="h-3.5 w-3.5 text-[#d4af37]" /> : <Eye className="h-3.5 w-3.5 text-[#d4af37]" />}
+            <span className="hidden lg:inline">{hideAmounts ? 'Hidden' : 'Amounts'}</span>
+          </button>
+
           {/* 3D / 2D Toggle */}
           <button
             onClick={toggle2D}
             title={settings.prefer2D ? 'Switch to 3D Scene' : 'Switch to 2D Charts'}
-            className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition-all ${
+            className={`flex items-center gap-1.5 rounded-lg border px-2 sm:px-2.5 py-1 text-xs font-medium transition-all ${
               settings.prefer2D
                 ? 'border-[#d4af37]/30 bg-[#d4af37]/10 text-[#f3d99b]'
                 : 'border-[#d4af37]/40 bg-[#d4af37]/20 text-[#f5f3ef]'
             }`}
           >
             {settings.prefer2D ? <Layers className="h-3.5 w-3.5" /> : <Box className="h-3.5 w-3.5 text-[#d4af37]" />}
-            <span>{settings.prefer2D ? '2D View' : '3D Scene'}</span>
+            <span className="hidden sm:inline">{settings.prefer2D ? '2D View' : '3D Scene'}</span>
           </button>
 
           {/* Offline / Online Pill */}

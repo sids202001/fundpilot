@@ -58,6 +58,9 @@ export function ExpenseModule({
     accounts,
     displayCurrency,
     rates,
+    hideAmounts,
+    displayMoney,
+    displayPercent,
   } = useStore();
 
   const [activeSubTab, setActiveSubTab] = useState<'list' | 'subscriptions' | 'budgets' | 'rules'>('list');
@@ -485,7 +488,7 @@ export function ExpenseModule({
       )}
 
       {/* Sub-Navigation Tabs */}
-      <div className="flex items-center gap-2 border-b border-[#262930] pb-2">
+      <div className="flex flex-wrap items-center gap-2 border-b border-[#262930] pb-2">
         <button
           onClick={() => setActiveSubTab('list')}
           className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
@@ -565,7 +568,7 @@ export function ExpenseModule({
               <div>
                 <span className="text-[10px] uppercase font-semibold text-[#9e9a93]">Money Out (Debits)</span>
                 <div className="text-base font-bold text-[#f5f3ef]">
-                  -{formatMoney(totalMoneyOutCents, displayCurrency || 'USD')}
+                  {hideAmounts ? '' : '-'}{displayMoney(totalMoneyOutCents, displayCurrency || 'USD')}
                 </div>
               </div>
               <div className="text-[10px] text-[#716c64]">Expenses & Bills</div>
@@ -575,7 +578,7 @@ export function ExpenseModule({
               <div>
                 <span className="text-[10px] uppercase font-semibold text-[#9e9a93]">Money In (Credits)</span>
                 <div className="text-base font-bold text-gain">
-                  +{formatMoney(totalMoneyInCents, displayCurrency || 'USD')}
+                  {hideAmounts ? '' : '+'}{displayMoney(totalMoneyInCents, displayCurrency || 'USD')}
                 </div>
               </div>
               <div className="text-[10px] text-[#716c64]">Refunds & Inflow</div>
@@ -695,7 +698,7 @@ export function ExpenseModule({
                         <div className="flex items-center justify-between sm:justify-end gap-4">
                           <div className="text-right">
                             <div className={`text-base font-bold ${isCredit ? 'text-gain' : 'text-[#f5f3ef]'}`}>
-                              {isCredit ? '+' : '-'}{formatMoney(exp.amountCents, exp.currency || displayCurrency || 'USD')}
+                              {hideAmounts ? '' : isCredit ? '+' : '-'}{displayMoney(exp.amountCents, exp.currency || displayCurrency || 'USD')}
                             </div>
                             <div className="text-[10px] text-[#716c64] capitalize">
                               {isCredit ? 'Money In' : 'Money Out'}
@@ -733,7 +736,7 @@ export function ExpenseModule({
                               <div key={idx} className="flex justify-between items-center py-1 border-b border-[#262930]/40">
                                 <span className="text-[#c8c4bc]">{it.name}</span>
                                 <span className="font-mono text-[#f5f3ef]">
-                                  {formatMoney(it.amountCents, exp.currency || displayCurrency || 'USD')}
+                                  {displayMoney(it.amountCents, exp.currency || displayCurrency || 'USD')}
                                 </span>
                               </div>
                             ))}
@@ -766,7 +769,7 @@ export function ExpenseModule({
               </div>
               <div className="text-right">
                 <span className="text-2xl font-bold text-gold-light">
-                  {formatMoney(totalSubscriptionBurnCents, displayCurrency || 'USD')}
+                  {displayMoney(totalSubscriptionBurnCents, displayCurrency || 'USD')}
                 </span>
                 <span className="text-xs text-[#9e9a93]"> / month</span>
               </div>
@@ -786,14 +789,14 @@ export function ExpenseModule({
                   </span>
                 </div>
                 <div className="mt-3 text-xl font-bold text-[#f5f3ef]">
-                  {formatMoney(sub.monthlyBurnCents, displayCurrency || 'USD')}
+                  {displayMoney(sub.monthlyBurnCents, displayCurrency || 'USD')}
                   <span className="text-xs font-normal text-[#9e9a93]"> / mo</span>
                 </div>
 
                 {sub.priceIncreaseCents && sub.priceIncreaseCents > 0 ? (
                   <div className="mt-2 flex items-center gap-1.5 text-xs text-loss">
                     <TrendingUp className="h-3.5 w-3.5" />
-                    <span>Price increased by +{formatMoney(sub.priceIncreaseCents, displayCurrency || 'USD')}!</span>
+                    <span>Price increased by {hideAmounts ? '' : '+'}{displayMoney(sub.priceIncreaseCents, displayCurrency || 'USD')}!</span>
                   </div>
                 ) : (
                   <div className="mt-2 text-xs text-[#9e9a93]">
@@ -840,10 +843,10 @@ export function ExpenseModule({
                   </div>
                   <div className="mt-3 flex items-baseline justify-between">
                     <span className="text-lg font-bold text-[#f5f3ef]">
-                      {formatMoney(spentCurrent, displayCurrency || 'USD')}
+                      {displayMoney(spentCurrent, displayCurrency || 'USD')}
                     </span>
                     <span className="text-xs text-[#9e9a93]">
-                      Limit: {limitCents > 0 ? formatMoney(limitCents, displayCurrency || 'USD') : 'None'}
+                      Limit: {limitCents > 0 ? displayMoney(limitCents, displayCurrency || 'USD') : 'None'}
                     </span>
                   </div>
 
@@ -853,10 +856,10 @@ export function ExpenseModule({
                         <span className={`font-semibold ${
                           pct >= 100 ? 'text-rose-400' : pct >= 80 ? 'text-amber-400' : 'text-emerald-400'
                         }`}>
-                          {pct}% used
+                          {displayPercent(pct)} used
                         </span>
                         <span className="text-[#9e9a93]">
-                          {pct >= 100 ? 'Over Budget' : `${formatMoney(Math.max(0, limitCents - spentCurrent), displayCurrency || 'USD')} left`}
+                          {pct >= 100 ? 'Over Budget' : `${displayMoney(Math.max(0, limitCents - spentCurrent), displayCurrency || 'USD')} left`}
                         </span>
                       </div>
                       <div className="h-2 w-full overflow-hidden rounded-full bg-[#1e222b]">
@@ -1074,7 +1077,7 @@ export function ExpenseModule({
           <div className="w-full max-w-sm rounded-2xl border border-[#262930] bg-[#111419] p-6 shadow-2xl">
             <h4 className="text-sm font-bold text-[#f5f3ef]">Delete Expense</h4>
             <p className="mt-2 text-xs text-[#c8c4bc]">
-              Are you sure you want to delete the expense of <strong className="text-gold-light">{formatMoney(deleteConfirmExpense.amountCents, deleteConfirmExpense.currency || displayCurrency || 'USD')}</strong> at <strong className="text-[#f5f3ef]">{deleteConfirmExpense.merchant}</strong> on {deleteConfirmExpense.date}?
+              Are you sure you want to delete the expense of <strong className="text-gold-light">{displayMoney(deleteConfirmExpense.amountCents, deleteConfirmExpense.currency || displayCurrency || 'USD')}</strong> at <strong className="text-[#f5f3ef]">{deleteConfirmExpense.merchant}</strong> on {deleteConfirmExpense.date}?
             </p>
             <p className="mt-1 text-[11px] text-[#716c64]">
               This will update your net worth and safe-to-spend totals immediately.
@@ -1426,7 +1429,7 @@ export function ExpenseModule({
                 type="button"
                 disabled={!voiceParsed || voiceParsed.amountCents <= 0}
                 onClick={confirmVoiceExpense}
-                className="rounded-xl bg-gradient-to-r from-gold to-gold-light px-4 py-2 text-xs font-semibold text-[#0b0d10] hover:brightness-110 disabled:opacity-50"
+                className="rounded-xl bg-gradient-to-r from-gold to-gold-light px-4 py-2 text-xs font-semibold text-[#0b0d10] hover:brightness-110 disabled:opacity-65 disabled:cursor-not-allowed"
               >
                 Confirm & Add
               </button>
@@ -1615,7 +1618,7 @@ export function ExpenseModule({
                 type="button"
                 disabled={!isOcrReconciled || ocrTotalCents <= 0}
                 onClick={confirmReceiptExpense}
-                className="rounded-xl bg-gradient-to-r from-gold to-gold-light px-4 py-2 text-xs font-semibold text-[#0b0d10] hover:brightness-110 disabled:opacity-40"
+                className="rounded-xl bg-gradient-to-r from-gold to-gold-light px-4 py-2 text-xs font-semibold text-[#0b0d10] hover:brightness-110 disabled:opacity-65 disabled:cursor-not-allowed"
               >
                 Import Receipt
               </button>
@@ -1684,7 +1687,7 @@ export function ExpenseModule({
                 type="button"
                 disabled={!csvResult || csvResult.expenses.length === 0}
                 onClick={confirmCSVImport}
-                className="rounded-xl bg-gradient-to-r from-gold to-gold-light px-4 py-2 text-xs font-semibold text-[#0b0d10] hover:brightness-110 disabled:opacity-50"
+                className="rounded-xl bg-gradient-to-r from-gold to-gold-light px-4 py-2 text-xs font-semibold text-[#0b0d10] hover:brightness-110 disabled:opacity-65 disabled:cursor-not-allowed"
               >
                 Import {csvResult?.expenses.length || 0} Transactions
               </button>

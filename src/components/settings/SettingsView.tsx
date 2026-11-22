@@ -49,6 +49,7 @@ export function SettingsView() {
     investments,
     rates,
     fxRate,
+    displayMoney,
   } = useStore();
 
   // Change PIN State (Item 1: Mandatory New Recovery Key Issue)
@@ -385,7 +386,7 @@ export function SettingsView() {
             <button
               type="submit"
               disabled={isChangingPin || !oldPin || !newPin}
-              className="rounded-xl bg-gradient-to-r from-gold to-gold-light px-5 py-2 text-xs font-semibold text-[#0b0d10] hover:brightness-110 disabled:opacity-50 transition-all"
+              className="rounded-xl bg-gradient-to-r from-gold to-gold-light px-5 py-2 text-xs font-semibold text-[#0b0d10] hover:brightness-110 disabled:opacity-65 disabled:cursor-not-allowed transition-all"
             >
               {isChangingPin ? 'Verifying PIN...' : 'Continue to Recovery Key Setup'}
             </button>
@@ -679,11 +680,11 @@ export function SettingsView() {
                 <div className="flex items-center justify-between sm:justify-end gap-3">
                   <div className="text-right">
                     <div className="font-semibold text-[#f5f3ef]">
-                      {formatMoney(acc.balanceCents, acc.currency)}
+                      {displayMoney(acc.balanceCents, acc.currency)}
                     </div>
                     {acc.currency !== displayCurrency && (
                       <div className="text-[11px] text-[#9e9a93]">
-                        ≈ {formatMoney(convBal, displayCurrency)} ({displayCurrency})
+                        ≈ {displayMoney(convBal, displayCurrency)} ({displayCurrency})
                       </div>
                     )}
                   </div>
@@ -935,7 +936,7 @@ export function SettingsView() {
                   )
                 }
                 onClick={handleConfirmPinChangeWithKey}
-                className="rounded-xl bg-gradient-to-r from-gold to-gold-light px-5 py-2 text-xs font-semibold text-[#0b0d10] hover:brightness-110 disabled:opacity-40 transition-all"
+                className="rounded-xl bg-gradient-to-r from-gold to-gold-light px-5 py-2 text-xs font-semibold text-[#0b0d10] hover:brightness-110 disabled:opacity-65 disabled:cursor-not-allowed transition-all"
               >
                 {isChangingPin ? 'Re-encrypting Vault...' : 'Confirm PIN Change & Activate Key'}
               </button>

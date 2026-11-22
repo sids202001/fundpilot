@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 
 export function BillsCard() {
-  const { bills, addBill, updateBill, toggleBillActive, markBillPaid, deleteBill, displayCurrency } = useStore();
+  const { bills, addBill, updateBill, toggleBillActive, markBillPaid, deleteBill, displayCurrency, displayMoney } = useStore();
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingBill, setEditingBill] = useState<BillReminder | null>(null);
@@ -146,7 +146,7 @@ export function BillsCard() {
                   <span className="text-[#9e9a93] text-[11px] ml-2">Due on Day {b.dueDay}</span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="font-mono font-bold text-amber-300">{formatMoney(b.amountCents, b.currency)}</span>
+                  <span className="font-mono font-bold text-amber-300">{displayMoney(b.amountCents, b.currency)}</span>
                   <button
                     onClick={() => markBillPaid(b.id, currentMonthStr)}
                     className="rounded bg-emerald-500/20 px-2 py-0.5 text-[11px] font-medium text-emerald-400 hover:bg-emerald-500/30"
@@ -175,7 +175,7 @@ export function BillsCard() {
                   <span className="text-rose-400 text-[11px] ml-2">Day {b.dueDay} (Past Due)</span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="font-mono font-bold text-rose-300">{formatMoney(b.amountCents, b.currency)}</span>
+                  <span className="font-mono font-bold text-rose-300">{displayMoney(b.amountCents, b.currency)}</span>
                   <button
                     onClick={() => markBillPaid(b.id, currentMonthStr)}
                     className="rounded bg-emerald-500/20 px-2 py-0.5 text-[11px] font-medium text-emerald-400 hover:bg-emerald-500/30"
@@ -215,7 +215,7 @@ export function BillsCard() {
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <span className="font-mono font-bold text-gold-light">{formatMoney(b.amountCents, b.currency)}</span>
+                  <span className="font-mono font-bold text-gold-light">{displayMoney(b.amountCents, b.currency)}</span>
                   <button
                     onClick={() => toggleBillActive(b.id, !b.active)}
                     className="text-[#9e9a93] hover:text-[#f5f3ef]"

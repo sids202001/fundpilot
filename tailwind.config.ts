@@ -13,6 +13,8 @@ const config: Config = {
         foreground: "var(--foreground)",
         // Refined Champagne Gold Palette (Primary Accent)
         gold: {
+          DEFAULT: "#d4af37", // Primary Champagne Gold
+          light: "#e2c58d",   // Light Champagne Gold
           50: "#fdfbf7",
           100: "#f7f1e5",
           200: "#eddcb9",
@@ -41,12 +43,14 @@ const config: Config = {
         },
         // Muted Gain / Loss Semantic Accents
         gain: {
+          DEFAULT: "#22c55e", // Refined Emerald
           300: "#86efac",
           400: "#4ade80",
           500: "#22c55e", // Refined Emerald
           600: "#16a34a",
         },
         loss: {
+          DEFAULT: "#ef4444", // Refined Terracotta Red
           300: "#fca5a5",
           400: "#f87171",
           500: "#ef4444", // Refined Terracotta Red

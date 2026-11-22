@@ -32,7 +32,7 @@ import {
 } from './crypto';
 import { db, getVaultMeta, saveVaultMeta, wipeAllData } from './db';
 import { detectSubscriptions } from './subscriptionDetector';
-import { convertCurrency, formatMoney, getCurrencyDecimals } from './currencies';
+import { convertCurrency, formatMoney, getCurrencyDecimals, getCurrencySymbol } from './currencies';
 import { validate12Words } from './bip39';
 
 // Helper: Get local YYYY-MM-DD date string (Fix 15)
@@ -165,6 +165,12 @@ interface StoreContextType {
   monthlyCreditInflowCents: number;
   migratedHoldingsCount: number;
 
+  // Privacy: Global Hide/Show Amounts Display Preference (localStorage only, no amounts stored)
+  hideAmounts: boolean;
+  toggleHideAmounts: () => void;
+  displayMoney: (units: number, currencyCode?: string) => string;
+  displayPercent: (value: number | string, suffix?: string) => string;
+
   // Honest Multi-Currency Status Markers (Item 4)
   unconvertedCurrencies: string[];
   netWorthUnconverted: string[];
@@ -214,6 +220,32 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [fxRatesMap, setFxRatesMap] = useState<FxRatesMap | null>(null);
   const [isOffline, setIsOffline] = useState(false);
   const [migratedHoldingsCount, setMigratedHoldingsCount] = useState(0);
+
+  // Global Privacy Eye Toggle (display-only preference in localStorage, persists across reloads & lock/unlock)
+  const [hideAmounts, setHideAmounts] = useState<boolean>(false);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem('fundpilot_hide_amounts');
+      if (saved === 'true') {
+        setHideAmounts(true);
+      }
+    } catch {
+      // Ignore storage access errors in restricted contexts
+    }
+  }, []);
+
+  const toggleHideAmounts = useCallback(() => {
+    setHideAmounts((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem('fundpilot_hide_amounts', next ? 'true' : 'false');
+      } catch {
+        // Ignore storage access errors
+      }
+      return next;
+    });
+  }, []);
 
   const idleTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -1879,6 +1911,27 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return { rate: fxRatesMap.rates['INR'], asOfDate: fxRatesMap.asOfDate };
   }, [fxRatesMap]);
 
+  const displayMoney = useCallback(
+    (units: number, currencyCode?: string) => {
+      const code = currencyCode || displayCurrency || 'USD';
+      if (hideAmounts) {
+        return `${getCurrencySymbol(code)} ••••`;
+      }
+      return formatMoney(units, code);
+    },
+    [hideAmounts, displayCurrency]
+  );
+
+  const displayPercent = useCallback(
+    (value: number | string, suffix: string = '%') => {
+      if (hideAmounts) {
+        return `••${suffix}`;
+      }
+      return `${value}${suffix}`;
+    },
+    [hideAmounts]
+  );
+
   return (
     <StoreContext.Provider
       value={{
@@ -1961,6 +2014,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         investmentsUnconverted,
         creditOwedUnconverted,
         safeToSpendUnconverted,
+        hideAmounts,
+        toggleHideAmounts,
+        displayMoney,
+        displayPercent,
       }}
     >
       {children}

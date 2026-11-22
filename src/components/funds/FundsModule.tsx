@@ -38,6 +38,9 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
     accounts,
     displayCurrency,
     rates,
+    hideAmounts,
+    displayMoney,
+    displayPercent,
   } = useStore();
 
   const [activeFundId, setActiveFundId] = useState<string | null>(selectedFundId || null);
@@ -219,7 +222,7 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
           if (fund.currency !== displayCurrency && rates[fund.currency]) {
             const conv = convertCurrency(fund.currentAmountCents, fund.currency, displayCurrency, rates);
             if (conv) {
-              convertedDisplay = `≈ ${formatMoney(conv.convertedAmount, displayCurrency)} (FX converted)`;
+              convertedDisplay = `≈ ${displayMoney(conv.convertedAmount, displayCurrency)} (FX converted)`;
             }
           }
 
@@ -265,10 +268,10 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
               {/* Progress and Balances */}
               <div className="mt-4 flex items-baseline justify-between">
                 <div className="text-2xl font-bold text-[#f5f3ef]">
-                  {formatMoney(fund.currentAmountCents, fund.currency)}
+                  {displayMoney(fund.currentAmountCents, fund.currency)}
                 </div>
                 <div className="text-xs text-[#9e9a93]">
-                  Target: {formatMoney(fund.targetAmountCents, fund.currency)}
+                  Target: {displayMoney(fund.targetAmountCents, fund.currency)}
                 </div>
               </div>
 
@@ -281,7 +284,7 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
               </div>
 
               <div className="mt-3 flex items-center justify-between text-xs">
-                <span className="text-gold-light font-semibold">{pct}% saved</span>
+                <span className="text-gold-light font-semibold">{displayPercent(pct)} saved</span>
                 <span className="text-[#9e9a93]">Target: {fund.targetDate}</span>
               </div>
 
@@ -289,7 +292,7 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
               <div className="mt-2 border-t border-[#262930] pt-2 text-[11px] text-[#9e9a93]">
                 <span>Monthly needed: </span>
                 <strong className="text-[#f5f3ef]">
-                  {formatMoney(monthlyNeededCents, fund.currency)}/mo
+                  {displayMoney(monthlyNeededCents, fund.currency)}/mo
                 </strong>
                 <span> to hit date in {diffMonths} mos</span>
               </div>
@@ -359,7 +362,7 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <span className={rule.active ? '' : 'line-through text-[#716c64]'}>
-                            Move {formatMoney(rule.amountCents, selectedFund.currency)} on day {rule.dayOfMonth}
+                            Move {displayMoney(rule.amountCents, selectedFund.currency)} on day {rule.dayOfMonth}
                             {srcAcc ? ` from ${srcAcc.name}` : ''}
                           </span>
                           {!rule.active && (
@@ -442,7 +445,7 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
                             alloc.type === 'deposit' ? 'text-gain' : 'text-loss'
                           }`}
                         >
-                          {alloc.type === 'deposit' ? '+' : '-'}{formatMoney(alloc.amountCents, selectedFund.currency)}
+                          {hideAmounts ? '' : alloc.type === 'deposit' ? '+' : '-'}{displayMoney(alloc.amountCents, selectedFund.currency)}
                         </div>
                         <button
                           onClick={() => setDeleteConfirmAlloc(alloc)}
@@ -682,7 +685,7 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
                 >
                   {liquidAccounts.map((a) => (
                     <option key={a.id} value={a.id}>
-                      {a.name} — Balance: {formatMoney(a.balanceCents, a.currency)}
+                      {a.name} — Balance: {displayMoney(a.balanceCents, a.currency)}
                     </option>
                   ))}
                 </select>
@@ -812,7 +815,7 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
               Are you sure you want to delete <strong className="text-gold-light">{deleteConfirmFund.name}</strong>?
             </p>
             <p className="mt-1 text-[11px] text-[#716c64]">
-              This removes the fund and its target from your calculations. (Current balance: {formatMoney(deleteConfirmFund.currentAmountCents, deleteConfirmFund.currency)})
+              This removes the fund and its target from your calculations. (Current balance: {displayMoney(deleteConfirmFund.currentAmountCents, deleteConfirmFund.currency)})
             </p>
             <div className="mt-5 flex justify-end gap-2">
               <button
@@ -841,7 +844,7 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
           <div className="w-full max-w-sm rounded-2xl border border-[#262930] bg-[#111419] p-6 shadow-2xl">
             <h4 className="text-sm font-bold text-[#f5f3ef]">Delete Allocation</h4>
             <p className="mt-2 text-xs text-[#c8c4bc]">
-              Delete this {deleteConfirmAlloc.type} of <strong className="text-gold-light">{formatMoney(deleteConfirmAlloc.amountCents, selectedFund?.currency || 'USD')}</strong>?
+              Delete this {deleteConfirmAlloc.type} of <strong className="text-gold-light">{displayMoney(deleteConfirmAlloc.amountCents, selectedFund?.currency || 'USD')}</strong>?
             </p>
             <p className="mt-1 text-[11px] text-[#716c64]">
               This will automatically reverse the balance change on both the fund and the source account.
