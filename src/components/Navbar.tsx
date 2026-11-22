@@ -130,14 +130,14 @@ export function Navbar({ activeTab, setActiveTab }: NavbarProps) {
             aria-label={hideAmounts ? 'Show all amounts' : 'Hide all amounts'}
             aria-pressed={hideAmounts}
             title={hideAmounts ? 'Show all amounts (Privacy Mode Active)' : 'Hide all amounts (Privacy Mode)'}
-            className={`flex items-center gap-1.5 whitespace-nowrap rounded-lg border px-2 py-1 text-xs font-medium transition-all ${
+            className={`flex items-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 py-1 text-xs font-medium transition-all ${
               hideAmounts
                 ? 'border-[#d4af37]/60 bg-[#d4af37]/20 text-[#f3d99b] shadow-sm'
                 : 'border-[#262930] bg-[#111419]/85 text-[#f5f3ef] hover:border-[#d4af37]/40 hover:text-[#f3d99b]'
             }`}
           >
             {hideAmounts ? <EyeOff className="h-3.5 w-3.5 text-[#d4af37]" /> : <Eye className="h-3.5 w-3.5 text-[#d4af37]" />}
-            <span className="hidden xl:inline">{hideAmounts ? 'Hidden' : 'Amounts'}</span>
+            <span className="hidden sm:inline">{hideAmounts ? 'Hidden' : 'Amounts'}</span>
           </button>
 
           {/* 3D / 2D Toggle */}

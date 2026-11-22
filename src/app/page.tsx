@@ -23,12 +23,27 @@ export default function Home() {
     setIsWebGLSupported(isWebGLAvailable());
   }, []);
 
-  // Register service worker on mount
+  // Register service worker on mount and force update check so new deploys take effect immediately
   useEffect(() => {
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch((err) => {
-        console.warn('Service worker registration failed:', err);
-      });
+      navigator.serviceWorker
+        .register('/sw.js', { updateViaCache: 'none' })
+        .then((reg) => {
+          reg.update().catch(() => {});
+        })
+        .catch((err) => {
+          console.warn('Service worker registration failed:', err);
+        });
+
+      const onMessage = (event: MessageEvent) => {
+        if (event.data && event.data.type === 'SW_UPDATED_RELOAD') {
+          window.location.reload();
+        }
+      };
+      navigator.serviceWorker.addEventListener('message', onMessage);
+      return () => {
+        navigator.serviceWorker.removeEventListener('message', onMessage);
+      };
     }
   }, []);
 
