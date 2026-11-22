@@ -13,6 +13,11 @@ html {
   max-width: 100%;
 }
 
+/* Prevent parent space-y-* utilities from offsetting fixed full-screen modal backdrops */
+.fixed.inset-0 {
+  margin-top: 0 !important;
+}
+
 body {
   color: var(--foreground);
   background-color: var(--background);

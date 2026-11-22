@@ -44,70 +44,70 @@ export function Navbar({ activeTab, setActiveTab }: NavbarProps) {
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
-              <span className="font-bold tracking-tight text-[#f5f3ef]">FundPilot</span>
-              <span className="hidden sm:inline-block rounded-full bg-[#d4af37]/10 px-1.5 py-0.5 text-[10px] font-medium text-[#d4af37] border border-[#d4af37]/25">
+              <span className="whitespace-nowrap font-bold tracking-tight text-[#f5f3ef]">FundPilot</span>
+              <span className="hidden sm:inline-block whitespace-nowrap rounded-full bg-[#d4af37]/10 px-1.5 py-0.5 text-[10px] font-medium text-[#d4af37] border border-[#d4af37]/25">
                 Local-First
               </span>
             </div>
-            <p className="hidden sm:block text-[10px] text-[#9e9a93]">Zero-Tracking • AES-256 Encrypted</p>
+            <p className="hidden sm:block whitespace-nowrap text-[10px] text-[#9e9a93]">Zero-Tracking • AES-256 Encrypted</p>
           </div>
         </div>
 
         {/* Navigation Tabs (Desktop) */}
-        <nav className="hidden md:flex items-center gap-1 rounded-xl border border-[#1e222b] bg-[#111419]/75 p-1">
+        <nav className="hidden md:flex shrink-0 items-center gap-1 rounded-xl border border-[#1e222b] bg-[#111419]/75 p-1">
           <button
             onClick={() => setActiveTab('dashboard')}
-            className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
+            className={`flex items-center gap-2 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
               activeTab === 'dashboard'
                 ? 'bg-[#d4af37]/15 text-[#f3d99b] border border-[#d4af37]/35 shadow-sm'
                 : 'text-[#9e9a93] hover:text-[#f5f3ef] hover:bg-[#1a1d24]'
             }`}
           >
-            <PieChart className="h-4 w-4" />
+            <PieChart className="h-4 w-4 shrink-0" />
             Dashboard
           </button>
           <button
             onClick={() => setActiveTab('expenses')}
-            className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
+            className={`flex items-center gap-2 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
               activeTab === 'expenses'
                 ? 'bg-[#d4af37]/15 text-[#f3d99b] border border-[#d4af37]/35 shadow-sm'
                 : 'text-[#9e9a93] hover:text-[#f5f3ef] hover:bg-[#1a1d24]'
             }`}
           >
-            <Wallet className="h-4 w-4" />
+            <Wallet className="h-4 w-4 shrink-0" />
             Expenses
           </button>
           <button
             onClick={() => setActiveTab('funds')}
-            className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
+            className={`flex items-center gap-2 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
               activeTab === 'funds'
                 ? 'bg-[#d4af37]/15 text-[#f3d99b] border border-[#d4af37]/35 shadow-sm'
                 : 'text-[#9e9a93] hover:text-[#f5f3ef] hover:bg-[#1a1d24]'
             }`}
           >
-            <PiggyBank className="h-4 w-4" />
+            <PiggyBank className="h-4 w-4 shrink-0" />
             Sinking Funds
           </button>
           <button
             onClick={() => setActiveTab('investments')}
-            className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
+            className={`flex items-center gap-2 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
               activeTab === 'investments'
                 ? 'bg-[#d4af37]/15 text-[#f3d99b] border border-[#d4af37]/35 shadow-sm'
                 : 'text-[#9e9a93] hover:text-[#f5f3ef] hover:bg-[#1a1d24]'
             }`}
           >
-            <TrendingUp className="h-4 w-4" />
+            <TrendingUp className="h-4 w-4 shrink-0" />
             Investments
           </button>
           <button
             onClick={() => setActiveTab('settings')}
-            className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
+            className={`flex items-center gap-2 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
               activeTab === 'settings'
                 ? 'bg-[#d4af37]/15 text-[#f3d99b] border border-[#d4af37]/35 shadow-sm'
                 : 'text-[#9e9a93] hover:text-[#f5f3ef] hover:bg-[#1a1d24]'
             }`}
           >
-            <Settings className="h-4 w-4" />
+            <Settings className="h-4 w-4 shrink-0" />
             Settings
           </button>
         </nav>
