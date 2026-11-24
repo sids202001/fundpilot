@@ -1,17 +1,37 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { useStore } from '@/lib/store';
 import { isWebGLAvailable } from '@/lib/webgl';
 import { LockScreen } from '@/components/LockScreen';
 import { Navbar, AppNavTab } from '@/components/Navbar';
 import { NetWorthSummary } from '@/components/dashboard/NetWorthSummary';
-import { FinanceScene } from '@/components/3d/FinanceScene';
-import { Dashboard2D } from '@/components/2d/Dashboard2D';
-import { ExpenseModule } from '@/components/expenses/ExpenseModule';
-import { FundsModule } from '@/components/funds/FundsModule';
-import { InvestmentsModule } from '@/components/investments/InvestmentsModule';
-import { SettingsView } from '@/components/settings/SettingsView';
+
+const FinanceScene = dynamic(
+  () => import('@/components/3d/FinanceScene').then((m) => m.FinanceScene),
+  { ssr: false }
+);
+const Dashboard2D = dynamic(
+  () => import('@/components/2d/Dashboard2D').then((m) => m.Dashboard2D),
+  { ssr: false }
+);
+const ExpenseModule = dynamic(
+  () => import('@/components/expenses/ExpenseModule').then((m) => m.ExpenseModule),
+  { ssr: false }
+);
+const FundsModule = dynamic(
+  () => import('@/components/funds/FundsModule').then((m) => m.FundsModule),
+  { ssr: false }
+);
+const InvestmentsModule = dynamic(
+  () => import('@/components/investments/InvestmentsModule').then((m) => m.InvestmentsModule),
+  { ssr: false }
+);
+const SettingsView = dynamic(
+  () => import('@/components/settings/SettingsView').then((m) => m.SettingsView),
+  { ssr: false }
+);
 
 export default function Home() {
   const { isVaultReady, isLocked, settings } = useStore();
@@ -23,7 +43,7 @@ export default function Home() {
     setIsWebGLSupported(isWebGLAvailable());
   }, []);
 
-  // Register service worker on mount and force update check so new deploys take effect immediately
+  // Register service worker on mount without forcing mid-load page reloads
   useEffect(() => {
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
       navigator.serviceWorker
@@ -34,16 +54,6 @@ export default function Home() {
         .catch((err) => {
           console.warn('Service worker registration failed:', err);
         });
-
-      const onMessage = (event: MessageEvent) => {
-        if (event.data && event.data.type === 'SW_UPDATED_RELOAD') {
-          window.location.reload();
-        }
-      };
-      navigator.serviceWorker.addEventListener('message', onMessage);
-      return () => {
-        navigator.serviceWorker.removeEventListener('message', onMessage);
-      };
     }
   }, []);
 

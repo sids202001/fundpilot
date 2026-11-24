@@ -251,6 +251,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   // Check vault status on mount
   useEffect(() => {
+    let settled = false;
+    const safetyTimer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        setIsVaultReady(true);
+      }
+    }, 3000);
+
     async function initVaultCheck() {
       try {
         const meta = await getVaultMeta();
@@ -270,7 +278,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       } catch (err) {
         console.error('Failed to initialize database:', err);
       } finally {
-        setIsVaultReady(true);
+        clearTimeout(safetyTimer);
+        if (!settled) {
+          settled = true;
+          setIsVaultReady(true);
+        }
       }
     }
     initVaultCheck();
@@ -282,6 +294,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setIsOffline(!navigator.onLine);
 
     return () => {
+      clearTimeout(safetyTimer);
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };

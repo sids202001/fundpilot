@@ -6,19 +6,17 @@ import { generateRecoveryKey, selectVerificationIndices, validate12Words } from 
 import {
   Lock,
   KeyRound,
-  ShieldCheck,
   CheckCircle2,
   AlertTriangle,
-  RotateCcw,
-  Eye,
-  EyeOff,
   Copy,
   Check,
   Key,
+  Upload,
+  X,
 } from 'lucide-react';
 
 export function LockScreen() {
-  const { isSetup, setupPin, unlockVault, recoverVaultWithKey } = useStore();
+  const { isSetup, setupPin, unlockVault, recoverVaultWithKey, importEncryptedBackup } = useStore();
 
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
@@ -39,6 +37,12 @@ export function LockScreen() {
   const [recoveryNewPin, setRecoveryNewPin] = useState('');
   const [recoveryConfirmPin, setRecoveryConfirmPin] = useState('');
   const [recoveryError, setRecoveryError] = useState<string | null>(null);
+
+  // Import Existing Backup Flow (from setup screen)
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importedNotice, setImportedNotice] = useState<string | null>(null);
 
   // Initialize recovery words on setup
   useEffect(() => {
@@ -113,12 +117,12 @@ export function LockScreen() {
   };
 
   const handlePinSubmitToWords = () => {
-    if (pin.length < 4) {
-      setError('PIN must be at least 4 digits.');
+    if (pin.length !== 6) {
+      setError('Master PIN must be 6 digits.');
       return;
     }
     if (pin !== confirmPin) {
-      setError('PINs do not match. Please re-enter.');
+      setError('PINs do not match. Please enter your 6-digit PIN again.');
       setPin('');
       setConfirmPin('');
       setIsConfirmingPin(false);
@@ -126,6 +130,41 @@ export function LockScreen() {
     }
     setError(null);
     setSetupStep(2);
+  };
+
+  const handleImportBackupFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImportError(null);
+    setIsImporting(true);
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      const content = evt.target?.result as string;
+      if (!content) {
+        setImportError('Could not read the selected file.');
+        setIsImporting(false);
+        return;
+      }
+      const ok = await importEncryptedBackup(content);
+      setIsImporting(false);
+      if (ok) {
+        setIsImportModalOpen(false);
+        setPin('');
+        setConfirmPin('');
+        setIsConfirmingPin(false);
+        setError(null);
+        setImportedNotice('Backup imported. Enter your 6-digit PIN to unlock your vault.');
+      } else {
+        setImportError('Invalid backup file. Please select a valid encrypted .fundpilot backup file.');
+      }
+    };
+    reader.onerror = () => {
+      setIsImporting(false);
+      setImportError('Failed to read the selected file.');
+    };
+    reader.readAsText(file);
+    e.target.value = '';
   };
 
   const handleProceedToVerify = () => {
@@ -201,18 +240,23 @@ export function LockScreen() {
   const currentDisplayPin = !isSetup && isConfirmingPin ? confirmPin : pin;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0b0d10] p-4 font-sans text-[#f5f3ef]">
+    <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center overflow-y-auto bg-[#0b0d10] p-4 py-6 font-sans text-[#f5f3ef]">
       {/* Background glow effects */}
-      <div className="pointer-events-none absolute -top-40 left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-gold/10 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-40 left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-[#e5c07b]/5 blur-3xl" />
+      <div className="pointer-events-none fixed -top-40 left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-gold/10 blur-3xl" />
+      <div className="pointer-events-none fixed -bottom-40 left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-[#e5c07b]/5 blur-3xl" />
 
-      <div className="relative w-full max-w-md rounded-2xl border border-[#262930] bg-[#111419]/95 p-8 shadow-2xl backdrop-blur-xl">
+      <div className={`relative my-auto w-full ${!isSetup && setupStep === 1 ? 'max-w-lg p-6 sm:p-7' : 'max-w-md p-8'} rounded-2xl border border-[#262930] bg-[#111419]/95 shadow-2xl backdrop-blur-xl`}>
         {/* HEADER */}
-        <div className="mb-6 flex flex-col items-center text-center">
-          <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gold/10 border border-gold/30 text-gold-light">
-            {isSetup ? <Lock className="h-7 w-7" /> : <KeyRound className="h-7 w-7" />}
+        <div className="mb-5 flex flex-col items-center text-center">
+          <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-gold/10 border border-gold/30 text-gold-light">
+            {isSetup ? <Lock className="h-6 w-6" /> : <KeyRound className="h-6 w-6" />}
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-[#f5f3ef]">
+          {!isSetup && setupStep === 1 && (
+            <span className="mb-1 text-[11px] font-semibold uppercase tracking-widest text-gold-light">
+              Welcome to FundPilot
+            </span>
+          )}
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[#f5f3ef]">
             {isSetup
               ? 'Unlock FundPilot Vault'
               : setupStep === 1
@@ -223,24 +267,59 @@ export function LockScreen() {
               ? 'Save Recovery Key'
               : 'Verify Recovery Key'}
           </h1>
-          <p className="mt-1 text-xs text-[#9e9a93]">
+          <p className="mt-1.5 text-xs leading-relaxed text-[#b8b3aa]">
             {isSetup
-              ? 'Enter your PIN to decrypt local database with AES-GCM'
+              ? 'Enter your 6-digit Master PIN to unlock your vault on this device.'
               : setupStep === 1
-              ? isConfirmingPin
-                ? 'Re-enter your 6-digit PIN to confirm'
-                : 'Zero-knowledge encryption at rest. Keys never leave this device.'
+              ? 'FundPilot is a personal finance app for your expenses, sinking funds, and investments. All of your data stays on this device only, encrypted with your Master PIN.'
               : setupStep === 2
-              ? 'Write down these 12 words in order. This is your emergency PIN recovery key.'
-              : 'Confirm 3 random words to ensure you saved your recovery key.'}
+              ? 'Write down these 12 words in order. If you forget your PIN, these words are the only way back in.'
+              : 'Confirm 3 random words to make sure you saved your recovery words.'}
           </p>
         </div>
+
+        {/* PLAIN-WORDS SETUP STEPS (Shown on first-time setup before the keypad) */}
+        {!isSetup && setupStep === 1 && (
+          <div className="mb-5 rounded-xl border border-[#262930] bg-[#0b0d10]/75 p-3.5 text-left text-[11.5px] leading-relaxed text-[#c9c4bb]">
+            <ol className="space-y-1.5">
+              <li className={!isConfirmingPin ? 'text-[#f5f3ef]' : 'text-[#9e9a93]'}>
+                <span className="font-semibold text-gold-light">Step 1:</span> Choose a 6-digit Master PIN. This PIN is the only key to your money data.
+              </li>
+              <li className={isConfirmingPin ? 'text-[#f5f3ef]' : 'text-[#9e9a93]'}>
+                <span className="font-semibold text-gold-light">Step 2:</span> Confirm the same PIN again.
+              </li>
+              <li className="text-[#9e9a93]">
+                <span className="font-semibold text-gold-light">Step 3:</span> Save your recovery words somewhere safe. If you forget the PIN, the recovery words are the only way back in. There is no reset by email, because there is no account and no server.
+              </li>
+            </ol>
+            <p className="mt-2.5 border-t border-[#262930]/80 pt-2 text-[11px] text-[#9e9a93]">
+              <span className="font-semibold text-gold-light">Note:</span> Your data lives only in this browser. To use FundPilot on another browser or device, export an encrypted backup and import it there with the same PIN.
+            </p>
+          </div>
+        )}
 
         {/* STEP 1: PIN ENTRY (OR NORMAL UNLOCK) */}
         {(isSetup || setupStep === 1) && (
           <>
+            {/* Imported backup notice */}
+            {isSetup && importedNotice && (
+              <div className="mb-4 flex items-center gap-2 rounded-lg border border-gold/30 bg-gold/10 p-3 text-xs text-gold-light">
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                <span>{importedNotice}</span>
+              </div>
+            )}
+
+            {/* Explicit PIN Length & Active Step Label */}
+            <div className="mb-2.5 text-center text-xs font-medium text-gold-light">
+              {isSetup
+                ? `Enter 6-digit PIN (${currentDisplayPin.length}/6 digits)`
+                : isConfirmingPin
+                ? `Step 2 of 3 — Confirm your 6-digit PIN (${currentDisplayPin.length}/6 digits)`
+                : `Step 1 of 3 — Enter a 6-digit Master PIN (${currentDisplayPin.length}/6 digits)`}
+            </div>
+
             {/* PIN Dots Indicator */}
-            <div className="mb-6 flex justify-center gap-3">
+            <div className="mb-5 flex justify-center gap-3">
               {[0, 1, 2, 3, 4, 5].map((idx) => (
                 <div
                   key={idx}
@@ -262,14 +341,14 @@ export function LockScreen() {
             )}
 
             {/* Numeric Keypad */}
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-3 gap-2.5">
               {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
                 <button
                   key={digit}
                   type="button"
                   disabled={isLoading}
                   onClick={() => handleDigit(digit)}
-                  className="flex h-14 items-center justify-center rounded-xl border border-[#262930] bg-[#171a21]/70 text-xl font-semibold text-[#f5f3ef] transition-all hover:border-gold/40 hover:bg-[#1e222b] active:scale-95 disabled:opacity-50"
+                  className="flex h-12 sm:h-13 items-center justify-center rounded-xl border border-[#262930] bg-[#171a21]/70 text-lg font-semibold text-[#f5f3ef] transition-all hover:border-gold/40 hover:bg-[#1e222b] active:scale-95 disabled:opacity-50"
                 >
                   {digit}
                 </button>
@@ -285,7 +364,7 @@ export function LockScreen() {
                   }
                   setError(null);
                 }}
-                className="flex h-14 items-center justify-center rounded-xl border border-[#262930] bg-[#171a21]/30 text-xs font-medium text-[#9e9a93] hover:bg-[#1e222b]/50"
+                className="flex h-12 sm:h-13 items-center justify-center rounded-xl border border-[#262930] bg-[#171a21]/30 text-xs font-medium text-[#9e9a93] hover:bg-[#1e222b]/50"
               >
                 Clear
               </button>
@@ -293,14 +372,14 @@ export function LockScreen() {
                 type="button"
                 disabled={isLoading}
                 onClick={() => handleDigit('0')}
-                className="flex h-14 items-center justify-center rounded-xl border border-[#262930] bg-[#171a21]/70 text-xl font-semibold text-[#f5f3ef] transition-all hover:border-gold/40 hover:bg-[#1e222b] active:scale-95 disabled:opacity-50"
+                className="flex h-12 sm:h-13 items-center justify-center rounded-xl border border-[#262930] bg-[#171a21]/70 text-lg font-semibold text-[#f5f3ef] transition-all hover:border-gold/40 hover:bg-[#1e222b] active:scale-95 disabled:opacity-50"
               >
                 0
               </button>
               <button
                 type="button"
                 onClick={handleBackspace}
-                className="flex h-14 items-center justify-center rounded-xl border border-[#262930] bg-[#171a21]/30 text-sm font-medium text-[#9e9a93] hover:bg-[#1e222b]/50"
+                className="flex h-12 sm:h-13 items-center justify-center rounded-xl border border-[#262930] bg-[#171a21]/30 text-sm font-medium text-[#9e9a93] hover:bg-[#1e222b]/50"
               >
                 ⌫
               </button>
@@ -310,13 +389,30 @@ export function LockScreen() {
             {!isSetup && isConfirmingPin && (
               <button
                 type="button"
-                disabled={isLoading || confirmPin.length < 4}
+                disabled={isLoading || confirmPin.length !== 6}
                 onClick={handlePinSubmitToWords}
-                className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-gold to-gold-light py-3 text-sm font-semibold text-[#0b0d10] shadow-[0_0_20px_rgba(212,175,55,0.3)] transition-all hover:brightness-110 disabled:opacity-65 disabled:cursor-not-allowed"
+                className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-gold to-gold-light py-3 text-sm font-semibold text-[#0b0d10] shadow-[0_0_20px_rgba(212,175,55,0.3)] transition-all hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <CheckCircle2 className="h-4 w-4" />
-                Next: Generate Recovery Key
+                Next: Save Recovery Words
               </button>
+            )}
+
+            {/* Setup Screen: Import Existing Vault Backup Button */}
+            {!isSetup && (
+              <div className="mt-4 border-t border-[#262930]/60 pt-4 text-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setImportError(null);
+                    setIsImportModalOpen(true);
+                  }}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-gold/30 bg-gold/5 px-4 py-2 text-xs font-medium text-gold-light transition-all hover:border-gold/60 hover:bg-gold/10"
+                >
+                  <Upload className="h-3.5 w-3.5" />
+                  <span>I already have a vault — import my backup</span>
+                </button>
+              </div>
             )}
 
             {/* Unlock Screen Recovery Entry Point (Fix 26) */}
@@ -433,6 +529,59 @@ export function LockScreen() {
           </div>
         )}
       </div>
+
+      {/* IMPORT BACKUP MODAL (from Setup Screen) */}
+      {isImportModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0b0d10]/85 p-4 backdrop-blur-md">
+          <div className="relative w-full max-w-md rounded-2xl border border-[#262930] bg-[#111419] p-6 shadow-2xl">
+            <button
+              type="button"
+              onClick={() => setIsImportModalOpen(false)}
+              className="absolute right-4 top-4 text-[#9e9a93] hover:text-[#f5f3ef]"
+              aria-label="Close"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            <div className="flex items-center gap-2 text-gold-light">
+              <Upload className="h-5 w-5" />
+              <h3 className="text-base font-bold text-[#f5f3ef]">Import Existing Vault Backup</h3>
+            </div>
+            <p className="mt-2 text-xs leading-relaxed text-[#b8b3aa]">
+              Choose your encrypted FundPilot backup file (<span className="font-mono text-gold-light">.fundpilot</span> or <span className="font-mono text-gold-light">.json</span>). After it loads, enter the same 6-digit Master PIN you used on your other browser or device to unlock your data.
+            </p>
+
+            {importError && (
+              <div className="mt-3 flex items-center gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 p-2.5 text-xs text-rose-300">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <span>{importError}</span>
+              </div>
+            )}
+
+            <div className="mt-5 flex flex-col gap-3">
+              <label className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-gold to-gold-light py-3 text-xs font-semibold text-[#0b0d10] shadow-[0_0_20px_rgba(212,175,55,0.25)] transition-all hover:brightness-110">
+                <Upload className="h-4 w-4" />
+                <span>{isImporting ? 'Importing backup...' : 'Choose Encrypted Backup File'}</span>
+                <input
+                  type="file"
+                  accept=".fundpilot,.json"
+                  disabled={isImporting}
+                  onChange={handleImportBackupFile}
+                  className="sr-only"
+                />
+              </label>
+
+              <button
+                type="button"
+                onClick={() => setIsImportModalOpen(false)}
+                className="w-full rounded-xl border border-[#262930] bg-[#171a21] py-2.5 text-xs text-[#9e9a93] hover:text-[#f5f3ef]"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* RECOVERY KEY MODAL (Fix 26) */}
       {isRecoveryModalOpen && (

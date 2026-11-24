@@ -1,5 +1,5 @@
-// FundPilot Service Worker — Network-First with Offline Fallback
-const CACHE_NAME = 'fundpilot-v4-20261122';
+// FundPilot Service Worker — Network-First with Safe Offline Fallback
+const CACHE_NAME = 'fundpilot-v5-20261124';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -14,28 +14,12 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
       const keys = await caches.keys();
-      let deletedLegacyCache = false;
       for (const key of keys) {
         if (key !== CACHE_NAME) {
           await caches.delete(key);
-          deletedLegacyCache = true;
         }
       }
       await self.clients.claim();
-      // If a legacy cache (such as fundpilot-v2) was serving stale HTML, refresh open windows immediately
-      if (deletedLegacyCache) {
-        const windowClients = await self.clients.matchAll({ type: 'window' });
-        for (const client of windowClients) {
-          try {
-            client.postMessage({ type: 'SW_UPDATED_RELOAD' });
-            if ('navigate' in client) {
-              await client.navigate(client.url);
-            }
-          } catch {
-            // Ignore navigation errors on cross-origin or closing tabs
-          }
-        }
-      }
     })()
   );
 });
@@ -43,8 +27,15 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
+  const url = new URL(event.request.url);
+
+  // Let Next.js hashed static assets bypass SW caching to prevent stale/corrupt chunk loads
+  if (url.pathname.startsWith('/_next/static/')) {
+    return;
+  }
+
   // If fetching FX API while offline, let client handle cache fallback
-  if (event.request.url.includes('/api/fx')) {
+  if (url.pathname.startsWith('/api/fx')) {
     event.respondWith(
       fetch(event.request).catch(() => {
         return new Response(JSON.stringify({ error: 'offline', offline: true }), {
@@ -56,8 +47,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Network-first for all app pages & assets so production deployments appear immediately;
-  // fall back to cache only when offline.
+  // Network-first for navigation and app assets; only fall back to '/' for page navigations
   event.respondWith(
     fetch(event.request)
       .then((response) => {
@@ -71,7 +61,11 @@ self.addEventListener('fetch', (event) => {
       })
       .catch(() => {
         return caches.match(event.request).then((cached) => {
-          return cached || caches.match('/');
+          if (cached) return cached;
+          if (event.request.mode === 'navigate') {
+            return caches.match('/');
+          }
+          return new Response('', { status: 504 });
         });
       })
   );
