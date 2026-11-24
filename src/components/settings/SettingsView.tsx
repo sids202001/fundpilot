@@ -442,25 +442,11 @@ export function SettingsView() {
             </select>
           </div>
 
-          {/* 2D vs 3D Preference */}
-          <div className="rounded-xl border border-[#262930] bg-[#0b0d10]/70 p-4 flex items-center justify-between">
-            <div>
-              <span className="text-xs font-semibold text-[#f5f3ef]">Prefer 2D Dashboard</span>
-              <p className="text-[11px] text-[#9e9a93] mt-0.5">Use Recharts view instead of 3D Canvas</p>
-            </div>
-            <input
-              type="checkbox"
-              checked={settings.prefer2D}
-              onChange={(e) => updateSettings({ prefer2D: e.target.checked })}
-              className="h-4 w-4 rounded accent-gold"
-            />
-          </div>
-
           {/* Reduced Motion Toggle */}
           <div className="rounded-xl border border-[#262930] bg-[#0b0d10]/70 p-4 flex items-center justify-between">
             <div>
               <span className="text-xs font-semibold text-[#f5f3ef]">Reduced Motion</span>
-              <p className="text-[11px] text-[#9e9a93] mt-0.5">Disables 3D camera sweeps and orbital rotations</p>
+              <p className="text-[11px] text-[#9e9a93] mt-0.5">Disables card hover lift and smooth transitions</p>
             </div>
             <input
               type="checkbox"

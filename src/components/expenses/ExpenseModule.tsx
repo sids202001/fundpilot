@@ -1,8 +1,11 @@
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
+import { MagneticButton } from '@/components/3d-ui/MagneticButton';
+import { RecurringAndDebtPanel } from '@/components/expenses/RecurringAndDebtPanel';
+import { BudgetRolloverPanel } from '@/components/expenses/BudgetRolloverPanel';
 import { useStore, getLocalDate, getLocalMonth } from '@/lib/store';
-import { Expense, ExpenseItem, CategoryRule, CustomCategory } from '@/lib/types';
+import { Expense, ExpenseItem, ExpenseSplit, CategoryRule, CustomCategory } from '@/lib/types';
 import { STANDARD_CATEGORIES, categorizeMerchant } from '@/lib/aiCategorizer';
 import { parseVoiceExpense } from '@/lib/voice';
 import { performReceiptOCR, parseReceiptText, ParsedReceipt } from '@/lib/ocr';
@@ -63,7 +66,7 @@ export function ExpenseModule({
     displayPercent,
   } = useStore();
 
-  const [activeSubTab, setActiveSubTab] = useState<'list' | 'subscriptions' | 'budgets' | 'rules'>('list');
+  const [activeSubTab, setActiveSubTab] = useState<'list' | 'subscriptions' | 'recurring' | 'budgets' | 'rules'>('list');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>(filterCategory || 'ALL');
   const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>(filterMonth || 'ALL');
@@ -98,6 +101,12 @@ export function ExpenseModule({
   const [manualNotes, setManualNotes] = useState('');
   const [manualAccountId, setManualAccountId] = useState<string>(accounts[0]?.id || '');
   const [manualEntryType, setManualEntryType] = useState<'debit' | 'credit'>('debit');
+  const [isSplitMode, setIsSplitMode] = useState(false);
+  const [manualSplits, setManualSplits] = useState<Array<{ category: string; amount: string }>>([
+    { category: 'Groceries', amount: '' },
+    { category: 'Shopping & Retail', amount: '' },
+  ]);
+  const [splitError, setSplitError] = useState<string | null>(null);
 
   // Edit Expense Form State
   const [editMerchant, setEditMerchant] = useState('');
@@ -193,28 +202,56 @@ export function ExpenseModule({
   // Manual Add Handler
   const handleManualAdd = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSplitError(null);
     const dollars = parseFloat(manualAmount);
     if (!manualMerchant || isNaN(dollars) || dollars <= 0) return;
 
     const amountCents = Math.round(dollars * 100);
     const cat = categorizeMerchant(manualMerchant, categoryRules);
 
+    let validatedSplits: ExpenseSplit[] | undefined;
+    if (isSplitMode) {
+      const parsedSplits = manualSplits
+        .map((s) => ({
+          category: s.category,
+          amountCents: Math.round((parseFloat(s.amount) || 0) * 100),
+        }))
+        .filter((s) => s.amountCents > 0);
+      const splitSum = parsedSplits.reduce((acc, s) => acc + s.amountCents, 0);
+      if (parsedSplits.length < 2) {
+        setSplitError('Add at least 2 split categories with amounts greater than 0.');
+        return;
+      }
+      if (splitSum !== amountCents) {
+        setSplitError(
+          `Splits total ($${(splitSum / 100).toFixed(2)}) must equal transaction total ($${(amountCents / 100).toFixed(2)}).`
+        );
+        return;
+      }
+      validatedSplits = parsedSplits;
+    }
+
     await addExpense({
       merchant: manualMerchant.trim(),
       amountCents,
       currency: manualCurrency,
-      category: manualCategory || cat.category,
+      category: validatedSplits ? validatedSplits[0].category : manualCategory || cat.category,
       date: manualDate,
       source: 'manual',
       confidence: cat.confidence,
       notes: manualNotes.trim() || undefined,
       accountId: manualAccountId || undefined,
       entryType: manualEntryType,
+      splits: validatedSplits,
     });
 
     setManualMerchant('');
     setManualAmount('');
     setManualNotes('');
+    setManualEntryType('debit');
+    setManualAccountId(accounts[0]?.id || '');
+    setIsSplitMode(false);
+    setSplitError(null);
     setIsManualModalOpen(false);
   };
 
@@ -438,13 +475,13 @@ export function ExpenseModule({
 
         {/* 4 Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
-          <button
+          <MagneticButton
             onClick={() => setIsManualModalOpen(true)}
             className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-gold to-gold-light px-3 py-2 text-xs font-semibold text-[#0b0d10] shadow-[0_0_15px_rgba(212,175,55,0.25)] hover:brightness-110"
           >
             <Plus className="h-4 w-4" />
             <span>Manual Entry</span>
-          </button>
+          </MagneticButton>
           <button
             onClick={() => setIsVoiceModalOpen(true)}
             className="flex items-center gap-1.5 rounded-xl border border-[#262930] bg-[#171a21] px-3 py-2 text-xs font-medium text-[#f5f3ef] hover:border-gold/40 hover:bg-[#1e222b]"
@@ -511,6 +548,16 @@ export function ExpenseModule({
           <span>Subscriptions ({subscriptions.size})</span>
         </button>
         <button
+          onClick={() => setActiveSubTab('recurring')}
+          className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
+            activeSubTab === 'recurring'
+              ? 'bg-gold text-[#0b0d10] font-semibold'
+              : 'text-[#9e9a93] hover:text-[#f5f3ef]'
+          }`}
+        >
+          Recurring &amp; Debt Payoff
+        </button>
+        <button
           onClick={() => setActiveSubTab('budgets')}
           className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
             activeSubTab === 'budgets'
@@ -564,24 +611,24 @@ export function ExpenseModule({
               ))}
             </div>
 
-            <div className="rounded-xl border border-[#262930] bg-[#111419]/70 px-4 py-2 flex items-center justify-between">
+            <div className="card-3d rounded-xl px-4 py-2.5 flex items-center justify-between">
               <div>
                 <span className="text-[10px] uppercase font-semibold text-[#9e9a93]">Money Out (Debits)</span>
                 <div className="text-base font-bold text-[#f5f3ef]">
                   {hideAmounts ? '' : '-'}{displayMoney(totalMoneyOutCents, displayCurrency || 'USD')}
                 </div>
               </div>
-              <div className="text-[10px] text-[#716c64]">Expenses & Bills</div>
+              <div className="text-[10px] text-[#a9a49b]">Expenses & Bills</div>
             </div>
 
-            <div className="rounded-xl border border-[#262930] bg-[#111419]/70 px-4 py-2 flex items-center justify-between">
+            <div className="card-3d rounded-xl px-4 py-2.5 flex items-center justify-between">
               <div>
                 <span className="text-[10px] uppercase font-semibold text-[#9e9a93]">Money In (Credits)</span>
                 <div className="text-base font-bold text-gain">
                   {hideAmounts ? '' : '+'}{displayMoney(totalMoneyInCents, displayCurrency || 'USD')}
                 </div>
               </div>
-              <div className="text-[10px] text-[#716c64]">Refunds & Inflow</div>
+              <div className="text-[10px] text-[#a9a49b]">Refunds & Inflow</div>
             </div>
           </div>
 
@@ -625,7 +672,7 @@ export function ExpenseModule({
           </div>
 
           {/* Transactions Table with Edit + Delete + Line Items */}
-          <div className="overflow-hidden rounded-2xl border border-[#262930] bg-[#111419]/60 backdrop-blur-md">
+          <div className="surface-3d overflow-hidden rounded-2xl">
             {displayedExpenses.length > 0 ? (
               <div className="divide-y divide-[#262930]">
                 {displayedExpenses.map((exp) => {
@@ -655,6 +702,11 @@ export function ExpenseModule({
                               {exp.isSubscription && (
                                 <span className="rounded bg-gold/10 px-1.5 py-0.5 text-[10px] font-medium text-gold-light border border-gold/30">
                                   Subscription
+                                </span>
+                              )}
+                              {exp.splits && exp.splits.length > 0 && (
+                                <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-300 border border-emerald-500/30">
+                                  Split ({exp.splits.length})
                                 </span>
                               )}
                               {exp.items && exp.items.length > 0 && (
@@ -691,6 +743,15 @@ export function ExpenseModule({
                             </div>
                             {exp.notes && (
                               <p className="mt-1 text-[11px] text-[#9e9a93] italic">{exp.notes}</p>
+                            )}
+                            {exp.splits && exp.splits.length > 0 && (
+                              <div className="mt-1 flex flex-wrap gap-1.5 text-[10px] text-[#c2bdb4]">
+                                {exp.splits.map((s, sIdx) => (
+                                  <span key={sIdx} className="rounded bg-[#171a21] px-1.5 py-0.5 border border-[#262930]">
+                                    {s.category}: <strong className="text-gold-light">{displayMoney(s.amountCents, exp.currency || displayCurrency || 'USD')}</strong>
+                                  </span>
+                                ))}
+                              </div>
                             )}
                           </div>
                         </div>
@@ -748,8 +809,22 @@ export function ExpenseModule({
                 })}
               </div>
             ) : (
-              <div className="p-12 text-center text-xs text-[#9e9a93]">
-                No expenses found. Add an expense using Manual, Voice, Receipt, or CSV import.
+              <div className="well-3d m-4 flex flex-col items-center justify-center rounded-xl py-14 px-6 text-center">
+                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-gold/30 bg-gold/10 text-gold-light">
+                  <Plus className="h-6 w-6" />
+                </div>
+                <p className="text-sm font-semibold text-[#f5f3ef]">No expenses recorded yet</p>
+                <p className="mt-1 max-w-sm text-xs text-[#c2bdb4]">
+                  Add your first expense manually, or use Voice, Receipt scan, or CSV import above.
+                </p>
+                <MagneticButton
+                  type="button"
+                  onClick={() => setIsManualModalOpen(true)}
+                  className="mt-5 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-gold to-gold-light px-5 py-2.5 text-xs font-semibold text-[#0b0d10] shadow-[0_0_20px_rgba(212,175,55,0.25)] hover:brightness-110 transition-all"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>Add Your First Expense</span>
+                </MagneticButton>
               </div>
             )}
           </div>
@@ -759,7 +834,7 @@ export function ExpenseModule({
       {/* VIEW 2: Subscriptions Dashboard */}
       {activeSubTab === 'subscriptions' && (
         <div className="space-y-4">
-          <div className="rounded-2xl border border-[#262930] bg-[#111419]/70 p-5 backdrop-blur-md">
+          <div className="surface-3d rounded-2xl p-5">
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-semibold text-[#f5f3ef]">Monthly Subscription Burn</h3>
@@ -780,7 +855,7 @@ export function ExpenseModule({
             {Array.from(subscriptions.values()).map((sub) => (
               <div
                 key={sub.merchant}
-                className="rounded-2xl border border-[#262930] bg-[#111419]/70 p-5 shadow-lg backdrop-blur-md"
+                className="card-3d rounded-2xl p-5"
               >
                 <div className="flex items-center justify-between">
                   <span className="font-semibold text-[#f5f3ef]">{sub.merchant}</span>
@@ -812,9 +887,15 @@ export function ExpenseModule({
         </div>
       )}
 
+      {/* VIEW 2B: Recurring Expenses & Debt Payoff Plans */}
+      {activeSubTab === 'recurring' && (
+        <RecurringAndDebtPanel allCategories={allCategories} />
+      )}
+
       {/* VIEW 3: Budgets & Month-over-Month Comparison */}
       {activeSubTab === 'budgets' && (
         <div className="space-y-4">
+          <BudgetRolloverPanel />
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {allCategories.map((cat) => {
               const spentCurrent = currentMonthExpenses
@@ -908,7 +989,7 @@ export function ExpenseModule({
       {activeSubTab === 'rules' && (
         <div className="space-y-6">
           {/* Custom Categories Section */}
-          <div className="rounded-2xl border border-[#262930] bg-[#111419]/70 p-5 backdrop-blur-md">
+          <div className="surface-3d rounded-2xl p-5">
             <h3 className="text-sm font-semibold text-[#f5f3ef]">Custom Categories</h3>
             <p className="text-xs text-[#9e9a93]">
               Add your own custom spending categories. Deleting a category reassigns existing transactions to Miscellaneous.
@@ -1005,7 +1086,7 @@ export function ExpenseModule({
           </div>
 
           {/* Global Categorization Rules Section */}
-          <div className="rounded-2xl border border-[#262930] bg-[#111419]/70 p-5 backdrop-blur-md">
+          <div className="surface-3d rounded-2xl p-5">
             <h3 className="text-sm font-semibold text-[#f5f3ef]">Global Categorization Rules</h3>
             <p className="text-xs text-[#9e9a93]">
               Keyword rules learned from user adjustments. Future imports for these merchants map automatically.
@@ -1306,13 +1387,13 @@ export function ExpenseModule({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs text-[#9e9a93]">Source Account</label>
+                  <label className="text-xs text-[#9e9a93]">Account (Auto-Updates Balance)</label>
                   <select
                     value={manualAccountId}
                     onChange={(e) => setManualAccountId(e.target.value)}
                     className="mt-1 w-full rounded-xl border border-[#262930] bg-[#0b0d10] px-3 py-2 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
                   >
-                    <option value="">None (Generic)</option>
+                    <option value="">None (Do not change balance)</option>
                     {accounts.map((a) => (
                       <option key={a.id} value={a.id}>{a.name} ({a.type})</option>
                     ))}
@@ -1325,10 +1406,101 @@ export function ExpenseModule({
                     onChange={(e) => setManualEntryType(e.target.value as any)}
                     className="mt-1 w-full rounded-xl border border-[#262930] bg-[#0b0d10] px-3 py-2 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
                   >
-                    <option value="debit">Money Out (Debit)</option>
-                    <option value="credit">Money In (Credit / Refund)</option>
+                    <option value="debit">Expense / Money Out (Debit)</option>
+                    <option value="credit">Income / Salary / Refund (Credit)</option>
                   </select>
                 </div>
+              </div>
+
+              {manualAccountId && (() => {
+                const selAcc = accounts.find((a) => a.id === manualAccountId);
+                if (!selAcc) return null;
+                const msg =
+                  selAcc.type === 'credit'
+                    ? manualEntryType === 'debit'
+                      ? `Will automatically increase ${selAcc.name} owed balance.`
+                      : `Will automatically reduce ${selAcc.name} owed balance (and credit category if refund).`
+                    : manualEntryType === 'debit'
+                    ? `Will automatically deduct from ${selAcc.name}.`
+                    : `Will automatically add to ${selAcc.name}.`;
+                return (
+                  <p className="rounded-lg border border-gold/25 bg-gold/5 px-2.5 py-1.5 text-[11px] text-gold-light">
+                    {msg}
+                  </p>
+                );
+              })()}
+
+              {/* Split Across Multiple Categories (Part D) */}
+              <div className="rounded-xl border border-[#262930] bg-[#0b0d10]/70 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-2 text-xs font-medium text-[#f5f3ef] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={isSplitMode}
+                      onChange={(e) => {
+                        setIsSplitMode(e.target.checked);
+                        setSplitError(null);
+                      }}
+                      className="rounded accent-gold"
+                    />
+                    <span>Split across multiple categories</span>
+                  </label>
+                  {isSplitMode && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setManualSplits((prev) => [...prev, { category: allCategories[0] || 'Groceries', amount: '' }])
+                      }
+                      className="text-[11px] text-gold-light hover:underline"
+                    >
+                      + Add Split
+                    </button>
+                  )}
+                </div>
+
+                {isSplitMode && (
+                  <div className="space-y-2 pt-1">
+                    {manualSplits.map((sp, idx) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <select
+                          value={sp.category}
+                          onChange={(e) =>
+                            setManualSplits((prev) =>
+                              prev.map((row, i) => (i === idx ? { ...row, category: e.target.value } : row))
+                            )
+                          }
+                          className="flex-1 rounded-lg border border-[#262930] bg-[#111419] px-2 py-1.5 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
+                        >
+                          {allCategories.map((c) => (
+                            <option key={c} value={c}>{c}</option>
+                          ))}
+                        </select>
+                        <input
+                          type="number"
+                          step="0.01"
+                          placeholder="0.00"
+                          value={sp.amount}
+                          onChange={(e) =>
+                            setManualSplits((prev) =>
+                              prev.map((row, i) => (i === idx ? { ...row, amount: e.target.value } : row))
+                            )
+                          }
+                          className="w-24 rounded-lg border border-[#262930] bg-[#111419] px-2 py-1.5 text-xs text-[#f5f3ef] focus:border-gold focus:outline-none"
+                        />
+                        {manualSplits.length > 2 && (
+                          <button
+                            type="button"
+                            onClick={() => setManualSplits((prev) => prev.filter((_, i) => i !== idx))}
+                            className="text-[#9e9a93] hover:text-rose-400"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    {splitError && <p className="text-[11px] text-rose-400">{splitError}</p>}
+                  </div>
+                )}
               </div>
 
               <div>

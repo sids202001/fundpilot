@@ -105,7 +105,7 @@ export function BillsCard() {
   };
 
   return (
-    <div className="rounded-2xl border border-[#262930] bg-[#111419]/80 p-5 backdrop-blur-md">
+    <div className="card-3d rounded-2xl p-5">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <Calendar className="h-4 w-4 text-gold" />

@@ -12,6 +12,10 @@ import {
   CategoryRule,
   CategoryBudget,
   BillReminder,
+  RecurringExpense,
+  DebtPayoffPlan,
+  BudgetTransfer,
+  NetWorthSnapshot,
   UserSettings,
   FxRatesMap,
   VaultRecord,
@@ -34,6 +38,8 @@ import { db, getVaultMeta, saveVaultMeta, wipeAllData } from './db';
 import { detectSubscriptions } from './subscriptionDetector';
 import { convertCurrency, formatMoney, getCurrencyDecimals, getCurrencySymbol } from './currencies';
 import { validate12Words } from './bip39';
+import { isLocalTestModeEnabled, LOCAL_TEST_MODE_SALT } from './testMode';
+import { computeAccountDeltaCents } from './financeHelpers';
 
 // Helper: Get local YYYY-MM-DD date string (Fix 15)
 export function getLocalDate(date: Date = new Date()): string {
@@ -71,6 +77,7 @@ interface StoreContextType {
   isVaultReady: boolean;
   isSetup: boolean;
   isLocked: boolean;
+  isTestMode: boolean;
   setupPin: (pin: string, recoveryWords: string[]) => Promise<boolean>;
   unlockVault: (pin: string) => Promise<boolean>;
   recoverVaultWithKey: (recoveryWords: string[], newPin: string) => Promise<boolean>;
@@ -90,6 +97,10 @@ interface StoreContextType {
   categoryRules: CategoryRule[];
   budgets: CategoryBudget[];
   bills: BillReminder[];
+  recurringExpenses: RecurringExpense[];
+  debtPlans: DebtPayoffPlan[];
+  budgetTransfers: BudgetTransfer[];
+  netWorthSnapshots: NetWorthSnapshot[];
   settings: UserSettings;
 
   // FX & Offline
@@ -139,6 +150,20 @@ interface StoreContextType {
   toggleBillActive: (id: string, active: boolean) => Promise<void>;
   markBillPaid: (id: string, monthStr?: string) => Promise<void>;
   deleteBill: (id: string) => Promise<void>;
+
+  // Recurring Expense Actions (Part C)
+  addRecurringExpense: (data: Omit<RecurringExpense, 'id' | 'active' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+  updateRecurringExpense: (id: string, data: Partial<RecurringExpense>) => Promise<void>;
+  toggleRecurringExpense: (id: string, active: boolean) => Promise<void>;
+  deleteRecurringExpense: (id: string) => Promise<void>;
+
+  // Credit Card Debt Payoff Plans (Part C)
+  upsertDebtPlan: (accountId: string, aprBps: number, monthlyPaymentCents: number) => Promise<void>;
+  deleteDebtPlan: (id: string) => Promise<void>;
+
+  // Budget Transfers (Part D)
+  addBudgetTransfer: (fromCategory: string, toCategory: string, amountCents: number, month?: string) => Promise<void>;
+  deleteBudgetTransfer: (id: string) => Promise<void>;
 
   // Settings Actions
   updateSettings: (newSettings: Partial<UserSettings>) => Promise<void>;
@@ -201,6 +226,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [isVaultReady, setIsVaultReady] = useState(false);
   const [isSetup, setIsSetup] = useState(false);
   const [isLocked, setIsLocked] = useState(true);
+  const [isTestMode, setIsTestMode] = useState(false);
   const [cryptoKey, setCryptoKey] = useState<CryptoKey | null>(null);
 
   // Collections state
@@ -214,6 +240,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [categoryRules, setCategoryRules] = useState<CategoryRule[]>([]);
   const [budgets, setBudgets] = useState<CategoryBudget[]>([]);
   const [bills, setBills] = useState<BillReminder[]>([]);
+  const [recurringExpenses, setRecurringExpenses] = useState<RecurringExpense[]>([]);
+  const [debtPlans, setDebtPlans] = useState<DebtPayoffPlan[]>([]);
+  const [budgetTransfers, setBudgetTransfers] = useState<BudgetTransfer[]>([]);
+  const [netWorthSnapshots, setNetWorthSnapshots] = useState<NetWorthSnapshot[]>([]);
   const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS);
 
   // FX & Offline
@@ -261,6 +291,145 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
     async function initVaultCheck() {
       try {
+        // Load cached FX rates from Dexie
+        const cachedFx = await db.fxCache.get('USD');
+        if (cachedFx) {
+          setFxRatesMap(cachedFx);
+        }
+
+        // Localhost-only test mode (default OFF, requires NEXT_PUBLIC_LOCAL_TEST_MODE=true on localhost)
+        if (isLocalTestModeEnabled()) {
+          const testKey = await deriveKeyFromPin('000000', LOCAL_TEST_MODE_SALT);
+          const allRecords = await db.records.toArray();
+          const loadedExpenses: Expense[] = [];
+          const loadedAccounts: Account[] = [];
+          const loadedInvestments: InvestmentEntry[] = [];
+          const loadedFunds: Fund[] = [];
+          const loadedAllocations: FundAllocation[] = [];
+          const loadedAutoRules: FundAutoRule[] = [];
+          const loadedCustomCats: CustomCategory[] = [];
+          const loadedRules: CategoryRule[] = [];
+          const loadedBudgets: CategoryBudget[] = [];
+          const loadedBills: BillReminder[] = [];
+          const loadedRecurring: RecurringExpense[] = [];
+          const loadedDebtPlans: DebtPayoffPlan[] = [];
+          const loadedTransfers: BudgetTransfer[] = [];
+          const loadedSnapshots: NetWorthSnapshot[] = [];
+          let loadedSettings: UserSettings = { ...DEFAULT_SETTINGS, updatedAt: Date.now() };
+
+          for (const rec of allRecords) {
+            try {
+              const decrypted = await decryptObject<any>(rec.ciphertext, rec.iv, testKey);
+              switch (rec.type) {
+                case 'expense':
+                  loadedExpenses.push(decrypted);
+                  break;
+                case 'account':
+                  loadedAccounts.push(decrypted);
+                  break;
+                case 'investment':
+                  loadedInvestments.push(decrypted);
+                  break;
+                case 'fund':
+                  loadedFunds.push(decrypted);
+                  break;
+                case 'fund_allocation':
+                  loadedAllocations.push(decrypted);
+                  break;
+                case 'fund_rule':
+                  loadedAutoRules.push(decrypted);
+                  break;
+                case 'custom_category':
+                  loadedCustomCats.push(decrypted);
+                  break;
+                case 'category_rule':
+                  loadedRules.push(decrypted);
+                  break;
+                case 'budget':
+                  loadedBudgets.push(decrypted);
+                  break;
+                case 'bill':
+                  loadedBills.push(decrypted);
+                  break;
+                case 'recurring_expense':
+                  loadedRecurring.push(decrypted);
+                  break;
+                case 'debt_plan':
+                  loadedDebtPlans.push(decrypted);
+                  break;
+                case 'budget_transfer':
+                  loadedTransfers.push(decrypted);
+                  break;
+                case 'net_worth_snapshot':
+                  loadedSnapshots.push(decrypted);
+                  break;
+                case 'settings':
+                  loadedSettings = decrypted;
+                  break;
+              }
+            } catch {
+              // Ignore records encrypted with a real user PIN vault
+            }
+          }
+
+          if (loadedAccounts.length === 0) {
+            loadedAccounts.push(
+              {
+                id: 'acc-primary-bank',
+                name: 'Primary Checking',
+                type: 'bank',
+                balanceCents: loadedSettings.bankCashCents || 0,
+                currency: 'USD',
+                lastEditedDate: getLocalDate(),
+                updatedAt: Date.now(),
+                deviceId: getOrCreateDeviceId(),
+              },
+              {
+                id: 'acc-primary-credit',
+                name: 'Primary Credit Card',
+                type: 'credit',
+                balanceCents: loadedSettings.creditCardOwedCents || 0,
+                currency: 'USD',
+                lastEditedDate: getLocalDate(),
+                updatedAt: Date.now(),
+                deviceId: getOrCreateDeviceId(),
+              }
+            );
+          }
+
+          setIsTestMode(true);
+          setCryptoKey(testKey);
+          setExpenses(loadedExpenses.sort((a, b) => b.date.localeCompare(a.date)));
+          setAccounts(loadedAccounts);
+          setInvestments(loadedInvestments);
+          setFunds(loadedFunds);
+          setFundAllocations(loadedAllocations);
+          setFundAutoRules(loadedAutoRules);
+          setCustomCategories(loadedCustomCats);
+          setCategoryRules(loadedRules);
+          setBudgets(
+            loadedBudgets.length > 0
+              ? loadedBudgets
+              : [
+                  { category: 'Groceries', monthlyLimitCents: 40000, updatedAt: Date.now(), deviceId: getOrCreateDeviceId() },
+                  { category: 'Food & Dining', monthlyLimitCents: 25000, updatedAt: Date.now(), deviceId: getOrCreateDeviceId() },
+                  { category: 'Shopping & Retail', monthlyLimitCents: 20000, updatedAt: Date.now(), deviceId: getOrCreateDeviceId() },
+                ]
+          );
+          setBills(loadedBills);
+          setRecurringExpenses(loadedRecurring);
+          setDebtPlans(loadedDebtPlans);
+          setBudgetTransfers(loadedTransfers);
+          setNetWorthSnapshots(loadedSnapshots.sort((a, b) => a.month.localeCompare(b.month)));
+          setSettings(loadedSettings);
+          setIsSetup(true);
+          setIsLocked(false);
+          refreshFx();
+          // Run recurring expenses monthly catch-up if due
+          await runRecurringExpensesCatchup(loadedRecurring, loadedExpenses, loadedAccounts, testKey);
+          return;
+        }
+
         const meta = await getVaultMeta();
         if (meta && meta.salt && meta.verifier) {
           setIsSetup(true);
@@ -268,12 +437,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         } else {
           setIsSetup(false);
           setIsLocked(true);
-        }
-
-        // Load cached FX rates from Dexie
-        const cachedFx = await db.fxCache.get('USD');
-        if (cachedFx) {
-          setFxRatesMap(cachedFx);
         }
       } catch (err) {
         console.error('Failed to initialize database:', err);
@@ -303,12 +466,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   // Idle timer for auto-lock
   const resetIdleTimer = useCallback(() => {
     if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-    if (!isLocked && settings.autoLockMinutes > 0) {
+    if (!isLocked && !isTestMode && settings.autoLockMinutes > 0) {
       idleTimerRef.current = setTimeout(() => {
         lockVault();
       }, settings.autoLockMinutes * 60 * 1000);
     }
-  }, [isLocked, settings.autoLockMinutes]);
+  }, [isLocked, isTestMode, settings.autoLockMinutes]);
 
   useEffect(() => {
     if (isLocked) return;
@@ -336,6 +499,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setCategoryRules([]);
     setBudgets([]);
     setBills([]);
+    setRecurringExpenses([]);
+    setDebtPlans([]);
+    setBudgetTransfers([]);
+    setNetWorthSnapshots([]);
   }, []);
 
   // Helper to persist encrypted record
@@ -597,6 +764,87 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Monthly Auto-Post Catch-Up for Recurring Expenses (Part C)
+  const runRecurringExpensesCatchup = async (
+    currentRules: RecurringExpense[],
+    currentExpenses: Expense[],
+    currentAccounts: Account[],
+    key: CryptoKey
+  ) => {
+    const today = new Date();
+    const currentDay = today.getDate();
+    const currentMonthStr = getLocalMonth(today);
+    const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+
+    let updatedRules = [...currentRules];
+    let updatedExpenses = [...currentExpenses];
+    let updatedAccounts = [...currentAccounts];
+    let hasChanges = false;
+
+    for (let i = 0; i < updatedRules.length; i++) {
+      const rule = updatedRules[i];
+      if (!rule.active) continue;
+      const effectiveDay = Math.min(rule.dayOfMonth, lastDayOfMonth);
+      if (currentDay < effectiveDay) continue;
+      if (rule.lastPostedMonth === currentMonthStr) continue;
+
+      const expId = `exp-rec-${rule.id}-${currentMonthStr}`;
+      const postDate = `${currentMonthStr}-${String(effectiveDay).padStart(2, '0')}`;
+      const newExp: Expense = {
+        id: expId,
+        amountCents: rule.amountCents,
+        currency: rule.currency || 'USD',
+        merchant: rule.name,
+        category: rule.category,
+        date: postDate,
+        source: 'manual',
+        accountId: rule.accountId,
+        entryType: 'debit',
+        balanceApplied: Boolean(rule.accountId),
+        recurringId: rule.id,
+        confidence: 1.0,
+        notes: 'Auto-posted recurring expense',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        deviceId: getOrCreateDeviceId(),
+      };
+
+      updatedExpenses = [newExp, ...updatedExpenses];
+      await persistRecord('expense', expId, newExp, key);
+
+      // Update linked account balance automatically (Part B)
+      if (rule.accountId) {
+        const acc = updatedAccounts.find((a) => a.id === rule.accountId);
+        if (acc) {
+          const delta = computeAccountDeltaCents(acc.type, 'debit', rule.amountCents);
+          const nextAcc: Account = {
+            ...acc,
+            balanceCents: acc.balanceCents + delta,
+            lastEditedDate: getLocalDate(),
+            updatedAt: Date.now(),
+          };
+          updatedAccounts = updatedAccounts.map((a) => (a.id === acc.id ? nextAcc : a));
+          await persistRecord('account', acc.id, nextAcc, key);
+        }
+      }
+
+      const nextRule: RecurringExpense = {
+        ...rule,
+        lastPostedMonth: currentMonthStr,
+        updatedAt: Date.now(),
+      };
+      updatedRules[i] = nextRule;
+      await persistRecord('recurring_expense', rule.id, nextRule, key);
+      hasChanges = true;
+    }
+
+    if (hasChanges) {
+      setRecurringExpenses(updatedRules);
+      setExpenses(updatedExpenses);
+      setAccounts(updatedAccounts);
+    }
+  };
+
   // Unlock Vault with PIN
   const unlockVault = async (pin: string): Promise<boolean> => {
     try {
@@ -620,6 +868,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       const loadedRules: CategoryRule[] = [];
       const loadedBudgets: CategoryBudget[] = [];
       const loadedBills: BillReminder[] = [];
+      const loadedRecurring: RecurringExpense[] = [];
+      const loadedDebtPlans: DebtPayoffPlan[] = [];
+      const loadedTransfers: BudgetTransfer[] = [];
+      const loadedSnapshots: NetWorthSnapshot[] = [];
       let loadedSettings = DEFAULT_SETTINGS;
 
       // Track legacy items to migrate
@@ -658,6 +910,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
               break;
             case 'bill':
               loadedBills.push(decrypted);
+              break;
+            case 'recurring_expense':
+              loadedRecurring.push(decrypted);
+              break;
+            case 'debt_plan':
+              loadedDebtPlans.push(decrypted);
+              break;
+            case 'budget_transfer':
+              loadedTransfers.push(decrypted);
+              break;
+            case 'net_worth_snapshot':
+              loadedSnapshots.push(decrypted);
               break;
             case 'settings':
               loadedSettings = decrypted;
@@ -766,12 +1030,17 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       setCategoryRules(loadedRules);
       setBudgets(activeBudgets);
       setBills(loadedBills);
+      setRecurringExpenses(loadedRecurring);
+      setDebtPlans(loadedDebtPlans);
+      setBudgetTransfers(loadedTransfers);
+      setNetWorthSnapshots(loadedSnapshots.sort((a, b) => a.month.localeCompare(b.month)));
       setSettings(loadedSettings);
 
       setIsLocked(false);
 
-      // Run auto-rules true catch-up
+      // Run auto-rules true catch-up & recurring expenses monthly catch-up
       await runFundAutoRulesCatchup(loadedFunds, loadedAutoRules, loadedAccounts, masterKey);
+      await runRecurringExpensesCatchup(loadedRecurring, enhancedExpenses, loadedAccounts, masterKey);
 
       refreshFx();
       return true;
@@ -913,18 +1182,64 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   };
 
   // ==========================================================================
-  // EXPENSE CRUD
+  // EXPENSE CRUD (Part B: Auto-updates account balance for NEW entries only)
   // ==========================================================================
+  const applyExpenseAccountDelta = async (
+    currentAccounts: Account[],
+    accountId: string | undefined,
+    entryType: 'debit' | 'credit',
+    amountCents: number,
+    expenseCurrency: string,
+    sign: 1 | -1, // 1 = apply, -1 = reverse
+    key: CryptoKey
+  ): Promise<Account[]> => {
+    if (!accountId) return currentAccounts;
+    const acc = currentAccounts.find((a) => a.id === accountId);
+    if (!acc) return currentAccounts;
+
+    let effectiveCents = amountCents;
+    if (expenseCurrency && acc.currency && expenseCurrency !== acc.currency) {
+      const conv = convertCurrency(amountCents, expenseCurrency, acc.currency, fxRatesMap?.rates || {});
+      if (conv) effectiveCents = conv.convertedAmount;
+    }
+
+    const delta = computeAccountDeltaCents(acc.type, entryType, effectiveCents) * sign;
+    const updatedAcc: Account = {
+      ...acc,
+      balanceCents: acc.balanceCents + delta,
+      lastEditedDate: getLocalDate(),
+      updatedAt: Date.now(),
+      deviceId: getOrCreateDeviceId(),
+    };
+    await persistRecord('account', acc.id, updatedAcc, key);
+    return currentAccounts.map((a) => (a.id === acc.id ? updatedAcc : a));
+  };
+
   const addExpense = async (expenseData: Omit<Expense, 'id' | 'createdAt' | 'updatedAt'>) => {
     if (!cryptoKey) return;
     const id = `exp-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const shouldApplyBalance = expenseData.balanceApplied !== false && Boolean(expenseData.accountId);
     const newExpense: Expense = {
       ...expenseData,
       id,
+      balanceApplied: shouldApplyBalance,
       createdAt: Date.now(),
       updatedAt: Date.now(),
       deviceId: getOrCreateDeviceId(),
     };
+
+    if (shouldApplyBalance && newExpense.accountId) {
+      const nextAccounts = await applyExpenseAccountDelta(
+        accounts,
+        newExpense.accountId,
+        newExpense.entryType || 'debit',
+        newExpense.amountCents,
+        newExpense.currency || 'USD',
+        1,
+        cryptoKey
+      );
+      setAccounts(nextAccounts);
+    }
 
     const updated = [newExpense, ...expenses];
     const subs = detectSubscriptions(updated);
@@ -949,6 +1264,31 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       deviceId: getOrCreateDeviceId(),
     };
 
+    // Only reverse & re-apply balances for entries that opted in (balanceApplied === true)
+    if (existing.balanceApplied) {
+      let nextAccounts = await applyExpenseAccountDelta(
+        accounts,
+        existing.accountId,
+        existing.entryType || 'debit',
+        existing.amountCents,
+        existing.currency || 'USD',
+        -1,
+        cryptoKey
+      );
+      if (updatedExpense.accountId) {
+        nextAccounts = await applyExpenseAccountDelta(
+          nextAccounts,
+          updatedExpense.accountId,
+          updatedExpense.entryType || 'debit',
+          updatedExpense.amountCents,
+          updatedExpense.currency || 'USD',
+          1,
+          cryptoKey
+        );
+      }
+      setAccounts(nextAccounts);
+    }
+
     const updatedList = expenses.map((e) => (e.id === id ? updatedExpense : e));
     const subs = detectSubscriptions(updatedList);
     const enhanced = updatedList.map((exp) => ({
@@ -962,6 +1302,20 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const deleteExpense = async (id: string) => {
     if (!cryptoKey) return;
+    const existing = expenses.find((e) => e.id === id);
+    if (existing && existing.balanceApplied && existing.accountId) {
+      const nextAccounts = await applyExpenseAccountDelta(
+        accounts,
+        existing.accountId,
+        existing.entryType || 'debit',
+        existing.amountCents,
+        existing.currency || 'USD',
+        -1,
+        cryptoKey
+      );
+      setAccounts(nextAccounts);
+    }
+
     const updatedList = expenses.filter((e) => e.id !== id);
     const subs = detectSubscriptions(updatedList);
     const enhanced = updatedList.map((exp) => ({
@@ -1444,6 +1798,112 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     await deleteRecord('bill', id);
   };
 
+  // ==========================================================================
+  // RECURRING EXPENSES (Part C)
+  // ==========================================================================
+  const addRecurringExpense = async (
+    data: Omit<RecurringExpense, 'id' | 'active' | 'createdAt' | 'updatedAt'>
+  ) => {
+    if (!cryptoKey) return;
+    const id = `rec-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const newRule: RecurringExpense = {
+      ...data,
+      id,
+      dayOfMonth: Math.max(1, Math.min(31, data.dayOfMonth)),
+      active: true,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      deviceId: getOrCreateDeviceId(),
+    };
+    const nextRules = [...recurringExpenses, newRule];
+    setRecurringExpenses(nextRules);
+    await persistRecord('recurring_expense', id, newRule, cryptoKey);
+    // If today is already on or past dayOfMonth, post for this month immediately
+    await runRecurringExpensesCatchup(nextRules, expenses, accounts, cryptoKey);
+  };
+
+  const updateRecurringExpense = async (id: string, data: Partial<RecurringExpense>) => {
+    if (!cryptoKey) return;
+    const existing = recurringExpenses.find((r) => r.id === id);
+    if (!existing) return;
+    const updatedRule: RecurringExpense = {
+      ...existing,
+      ...data,
+      dayOfMonth: data.dayOfMonth ? Math.max(1, Math.min(31, data.dayOfMonth)) : existing.dayOfMonth,
+      updatedAt: Date.now(),
+      deviceId: getOrCreateDeviceId(),
+    };
+    setRecurringExpenses((prev) => prev.map((r) => (r.id === id ? updatedRule : r)));
+    await persistRecord('recurring_expense', id, updatedRule, cryptoKey);
+  };
+
+  const toggleRecurringExpense = async (id: string, active: boolean) => {
+    await updateRecurringExpense(id, { active });
+  };
+
+  const deleteRecurringExpense = async (id: string) => {
+    if (!cryptoKey) return;
+    setRecurringExpenses((prev) => prev.filter((r) => r.id !== id));
+    await deleteRecord('recurring_expense', id);
+  };
+
+  // ==========================================================================
+  // CREDIT CARD DEBT PAYOFF PLANS (Part C)
+  // ==========================================================================
+  const upsertDebtPlan = async (accountId: string, aprBps: number, monthlyPaymentCents: number) => {
+    if (!cryptoKey) return;
+    const existing = debtPlans.find((d) => d.accountId === accountId);
+    const id = existing ? existing.id : `debt-${accountId}`;
+    const plan: DebtPayoffPlan = {
+      id,
+      accountId,
+      aprBps: Math.max(0, Math.round(aprBps)),
+      monthlyPaymentCents: Math.max(0, Math.round(monthlyPaymentCents)),
+      active: true,
+      updatedAt: Date.now(),
+      deviceId: getOrCreateDeviceId(),
+    };
+    setDebtPlans((prev) => [...prev.filter((d) => d.accountId !== accountId), plan]);
+    await persistRecord('debt_plan', id, plan, cryptoKey);
+  };
+
+  const deleteDebtPlan = async (id: string) => {
+    if (!cryptoKey) return;
+    setDebtPlans((prev) => prev.filter((d) => d.id !== id));
+    await deleteRecord('debt_plan', id);
+  };
+
+  // ==========================================================================
+  // BUDGET TRANSFERS (Part D)
+  // ==========================================================================
+  const addBudgetTransfer = async (
+    fromCategory: string,
+    toCategory: string,
+    amountCents: number,
+    month: string = getLocalMonth()
+  ) => {
+    if (!cryptoKey || !fromCategory || !toCategory || fromCategory === toCategory || amountCents <= 0) return;
+    const id = `btr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const transfer: BudgetTransfer = {
+      id,
+      month,
+      fromCategory,
+      toCategory,
+      amountCents: Math.round(amountCents),
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      deviceId: getOrCreateDeviceId(),
+    };
+    setBudgetTransfers((prev) => [...prev, transfer]);
+    await persistRecord('budget_transfer', id, transfer, cryptoKey);
+  };
+
+  const deleteBudgetTransfer = async (id: string) => {
+    if (!cryptoKey) return;
+    setBudgetTransfers((prev) => prev.filter((t) => t.id !== id));
+    await deleteRecord('budget_transfer', id);
+  };
+
   // Update Settings
   const updateSettings = async (newSettings: Partial<UserSettings>) => {
     if (!cryptoKey) return;
@@ -1821,6 +2281,58 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const totalNetWorthCents = totalBankCashCents + totalFundsCents + totalInvestmentsCents - totalCreditOwedCents;
 
+  // Part E: Automatically save/update monthly Net Worth snapshot encrypted in vault
+  useEffect(() => {
+    if (isLocked || !cryptoKey) return;
+    const monthStr = getLocalMonth();
+    const id = `nw-${monthStr}`;
+    const existing = netWorthSnapshots.find((s) => s.month === monthStr);
+    if (
+      existing &&
+      existing.netWorthCents === totalNetWorthCents &&
+      existing.cashCents === totalBankCashCents &&
+      existing.fundsCents === totalFundsCents &&
+      existing.investmentsCents === totalInvestmentsCents &&
+      existing.creditOwedCents === totalCreditOwedCents &&
+      existing.currency === displayCurrency
+    ) {
+      return;
+    }
+
+    const snap: NetWorthSnapshot = {
+      id,
+      month: monthStr,
+      netWorthCents: totalNetWorthCents,
+      cashCents: totalBankCashCents,
+      fundsCents: totalFundsCents,
+      investmentsCents: totalInvestmentsCents,
+      creditOwedCents: totalCreditOwedCents,
+      currency: displayCurrency,
+      updatedAt: Date.now(),
+      deviceId: getOrCreateDeviceId(),
+    };
+
+    setNetWorthSnapshots((prev) => {
+      const next = [...prev.filter((s) => s.month !== monthStr), snap].sort((a, b) =>
+        a.month.localeCompare(b.month)
+      );
+      return next;
+    });
+    persistRecord('net_worth_snapshot', id, snap, cryptoKey).catch((err) => {
+      console.error('Failed to persist net worth snapshot:', err);
+    });
+  }, [
+    isLocked,
+    cryptoKey,
+    totalNetWorthCents,
+    totalBankCashCents,
+    totalFundsCents,
+    totalInvestmentsCents,
+    totalCreditOwedCents,
+    displayCurrency,
+    netWorthSnapshots,
+  ]);
+
   // Monthly Spending & Inflow Math (Fix 13: Money-in is NEVER spending)
   const currentMonth = getLocalMonth();
 
@@ -1958,6 +2470,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         rotateRecoveryKey,
         lockVault,
         autoLockMinutes: settings.autoLockMinutes,
+        isTestMode,
         expenses,
         accounts,
         investments,
@@ -1968,6 +2481,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         categoryRules,
         budgets,
         bills,
+        recurringExpenses,
+        debtPlans,
+        budgetTransfers,
+        netWorthSnapshots,
         settings,
         fxRatesMap,
         rates,
@@ -2003,6 +2520,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         toggleBillActive,
         markBillPaid,
         deleteBill,
+        addRecurringExpense,
+        updateRecurringExpense,
+        toggleRecurringExpense,
+        deleteRecurringExpense,
+        upsertDebtPlan,
+        deleteDebtPlan,
+        addBudgetTransfer,
+        deleteBudgetTransfer,
         updateSettings,
         exportSyncBundle,
         importSyncBundle,

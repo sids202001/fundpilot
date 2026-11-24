@@ -1,7 +1,10 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { useStore } from '@/lib/store';
+import { TiltCard } from '@/components/3d-ui/TiltCard';
+import { MagneticButton } from '@/components/3d-ui/MagneticButton';
+import { useStore, getLocalMonth } from '@/lib/store';
+import { computeFundPace } from '@/lib/financeHelpers';
 import { Fund, FundAllocation, FundAutoRule } from '@/lib/types';
 import { formatMoney, SUPPORTED_CURRENCIES, convertCurrency } from '@/lib/currencies';
 import {
@@ -194,13 +197,13 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
             Money with a job — segregated from spendable cash. Deposits move money out of accounts; withdrawals return money.
           </p>
         </div>
-        <button
+        <MagneticButton
           onClick={() => setIsCreateModalOpen(true)}
           className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-gold to-gold-light px-3.5 py-2 text-xs font-semibold text-[#0b0d10] shadow-[0_0_15px_rgba(212,175,55,0.25)] hover:brightness-110"
         >
           <Plus className="h-4 w-4" />
           <span>Create New Fund</span>
-        </button>
+        </MagneticButton>
       </div>
 
       {/* Sinking Funds Grid */}
@@ -210,12 +213,10 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
           const ratio = fund.targetAmountCents > 0 ? fund.currentAmountCents / fund.targetAmountCents : 0;
           const pct = Math.min(100, Math.round(ratio * 100));
 
-          // Calculate required monthly contribution to hit target date
-          const today = new Date();
-          const targetD = new Date(fund.targetDate);
-          const diffMonths = Math.max(1, (targetD.getFullYear() - today.getFullYear()) * 12 + (targetD.getMonth() - today.getMonth()));
-          const remainingCents = Math.max(0, fund.targetAmountCents - fund.currentAmountCents);
-          const monthlyNeededCents = Math.round(remainingCents / diffMonths);
+          // Calculate pace: required monthly = (target - current) / months left -> on-track / at-risk
+          const pace = computeFundPace(fund, fundAutoRules, fundAllocations, getLocalMonth());
+          const diffMonths = pace.monthsLeft;
+          const monthlyNeededCents = pace.requiredMonthlyCents;
 
           // Multi-currency calculation
           let convertedDisplay = null;
@@ -227,16 +228,16 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
           }
 
           return (
-            <div
+            <TiltCard
               key={fund.id}
               onClick={() => setActiveFundId(fund.id)}
-              className={`cursor-pointer rounded-2xl border p-5 shadow-lg backdrop-blur-md transition-all ${
+              className={`card-3d cursor-pointer rounded-2xl p-5 ${
                 isSelected
-                  ? 'border-gold bg-[#111419]/90 ring-1 ring-gold/40'
-                  : 'border-[#262930] bg-[#111419]/70 hover:border-gold/30'
+                  ? '!border-gold ring-1 ring-gold/40'
+                  : ''
               }`}
             >
-              <div className="flex items-center justify-between">
+              <div className="tilt-z-sm flex items-center justify-between">
                 <span className="font-bold text-[#f5f3ef]">{fund.name}</span>
                 <div className="flex items-center gap-1.5">
                   <span className="rounded bg-[#1e222b] px-2 py-0.5 text-[10px] font-semibold text-gold-light border border-gold/20">
@@ -284,17 +285,30 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
               </div>
 
               <div className="mt-3 flex items-center justify-between text-xs">
-                <span className="text-gold-light font-semibold">{displayPercent(pct)} saved</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-gold-light font-semibold">{displayPercent(pct)} saved</span>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[10px] font-semibold border ${
+                      pace.status === 'funded'
+                        ? 'bg-gold/15 text-gold-light border-gold/40'
+                        : pace.status === 'on-track'
+                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                        : 'bg-amber-500/10 text-amber-300 border-amber-500/30'
+                    }`}
+                  >
+                    {pace.status === 'funded' ? 'Funded' : pace.status === 'on-track' ? 'On Track' : 'At Risk'}
+                  </span>
+                </div>
                 <span className="text-[#9e9a93]">Target: {fund.targetDate}</span>
               </div>
 
               {/* Monthly requirement */}
-              <div className="mt-2 border-t border-[#262930] pt-2 text-[11px] text-[#9e9a93]">
-                <span>Monthly needed: </span>
+              <div className="mt-2 border-t border-[#262930] pt-2 text-[11px] text-[#c2bdb4]">
+                <span>Required: </span>
                 <strong className="text-[#f5f3ef]">
                   {displayMoney(monthlyNeededCents, fund.currency)}/mo
                 </strong>
-                <span> to hit date in {diffMonths} mos</span>
+                <span> ({diffMonths} {diffMonths === 1 ? 'mo' : 'mos'} left)</span>
               </div>
 
               {/* Multi-currency label */}
@@ -304,14 +318,14 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
                   <span>{convertedDisplay}</span>
                 </div>
               )}
-            </div>
+            </TiltCard>
           );
         })}
       </div>
 
       {/* Selected Fund Detail & Allocation Ledger */}
       {selectedFund ? (
-        <div className="rounded-2xl border border-[#262930] bg-[#111419]/80 p-6 backdrop-blur-md">
+        <div className="surface-3d rounded-2xl p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-[#262930] pb-4">
             <div>
               <div className="flex items-center gap-2">
@@ -326,7 +340,7 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
             </div>
 
             <div className="flex items-center gap-2">
-              <button
+              <MagneticButton
                 onClick={() => {
                   setAllocType('deposit');
                   setAllocError(null);
@@ -336,7 +350,7 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
               >
                 <ArrowDownLeft className="h-4 w-4" />
                 <span>Deposit / Withdraw</span>
-              </button>
+              </MagneticButton>
               <button
                 onClick={() => setIsRuleModalOpen(true)}
                 className="flex items-center gap-1.5 rounded-xl border border-[#262930] bg-[#171a21] px-3 py-1.5 text-xs font-medium text-[#f5f3ef] hover:border-gold/40 hover:bg-[#1e222b]"
@@ -412,7 +426,7 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
             <h4 className="text-xs font-semibold uppercase tracking-wider text-[#9e9a93] mb-2">
               Transaction History
             </h4>
-            <div className="divide-y divide-[#262930] rounded-xl border border-[#262930] bg-[#0b0d10]/60">
+            <div className="well-3d divide-y divide-[#262930] rounded-xl">
               {activeAllocations.length > 0 ? (
                 activeAllocations.map((alloc) => {
                   const srcAcc = accounts.find((a) => a.id === alloc.sourceAccountId);
@@ -467,9 +481,23 @@ export function FundsModule({ selectedFundId }: { selectedFundId?: string | null
           </div>
         </div>
       ) : (
-        <div className="rounded-2xl border border-[#262930] bg-[#111419]/40 p-12 text-center text-xs text-[#9e9a93]">
-          No sinking funds created. Click &quot;Create New Fund&quot; to set up an Emergency Fund, Vacation Fund, or House Fund.
-        </div>
+        <TiltCard maxTilt={3.5} className="card-3d flex flex-col items-center justify-center rounded-2xl py-16 px-6 text-center">
+          <div className="tilt-z-md mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-gold/30 bg-gold/10 text-gold-light">
+            <PiggyBank className="h-6 w-6" />
+          </div>
+          <h3 className="tilt-z-sm text-base font-semibold text-[#f5f3ef]">No sinking funds yet</h3>
+          <p className="tilt-z-sm mt-1.5 max-w-md text-xs leading-relaxed text-[#c2bdb4]">
+            Set aside money for specific goals like an Emergency Fund, Vacation, or House Down Payment — kept separate from your spendable cash.
+          </p>
+          <MagneticButton
+            type="button"
+            onClick={() => setIsCreateModalOpen(true)}
+            className="tilt-z-lg mt-5 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-gold to-gold-light px-5 py-2.5 text-xs font-semibold text-[#0b0d10] shadow-[0_0_20px_rgba(212,175,55,0.25)] hover:brightness-110 transition-all"
+          >
+            <Plus className="h-4 w-4" />
+            <span>Create Your First Fund</span>
+          </MagneticButton>
+        </TiltCard>
       )}
 
       {/* CREATE FUND MODAL */}

@@ -3,15 +3,12 @@
 import React, { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { useStore } from '@/lib/store';
-import { isWebGLAvailable } from '@/lib/webgl';
 import { LockScreen } from '@/components/LockScreen';
 import { Navbar, AppNavTab } from '@/components/Navbar';
 import { NetWorthSummary } from '@/components/dashboard/NetWorthSummary';
+import { PortfolioDepthEffect } from '@/components/common/PortfolioDepthEffect';
+import { AlertTriangle } from 'lucide-react';
 
-const FinanceScene = dynamic(
-  () => import('@/components/3d/FinanceScene').then((m) => m.FinanceScene),
-  { ssr: false }
-);
 const Dashboard2D = dynamic(
   () => import('@/components/2d/Dashboard2D').then((m) => m.Dashboard2D),
   { ssr: false }
@@ -34,14 +31,8 @@ const SettingsView = dynamic(
 );
 
 export default function Home() {
-  const { isVaultReady, isLocked, settings } = useStore();
+  const { isVaultReady, isLocked, isTestMode } = useStore();
   const [activeTab, setActiveTab] = useState<AppNavTab>('dashboard');
-  const [isWebGLSupported, setIsWebGLSupported] = useState<boolean>(true);
-
-  // Check hardware/browser WebGL capability on mount
-  useEffect(() => {
-    setIsWebGLSupported(isWebGLAvailable());
-  }, []);
 
   // Register service worker on mount without forcing mid-load page reloads
   useEffect(() => {
@@ -99,7 +90,24 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen w-full max-w-full overflow-x-clip bg-[#0b0d10] text-[#f5f3ef] flex flex-col font-sans">
+    <div className="relative min-h-screen w-full max-w-full overflow-x-clip bg-[#0b0d10] text-[#f5f3ef] flex flex-col font-sans">
+      {/* Portfolio-style Ambient Gold Glow Orbs & 3D Card Tilt/Spotlight Controller */}
+      <PortfolioDepthEffect />
+
+      {/* Localhost-only Test Mode Warning Banner */}
+      {isTestMode && (
+        <div
+          role="status"
+          className="relative z-40 flex flex-wrap items-center justify-center gap-2 border-b border-amber-500/40 bg-amber-500/15 px-4 py-2 text-center text-xs font-semibold text-amber-200 backdrop-blur-md"
+        >
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-400" />
+          <span>TEST MODE — security off, test data only</span>
+          <span className="hidden sm:inline font-normal text-amber-300/90">
+            (Localhost only • Never enter real money)
+          </span>
+        </div>
+      )}
+
       {/* Top Navbar */}
       <Navbar
         activeTab={activeTab}
@@ -107,28 +115,20 @@ export default function Home() {
       />
 
       {/* Main Content Area */}
-      <main className="mx-auto w-full min-w-0 max-w-7xl flex-1 px-4 py-6 sm:px-6 space-y-6">
+      <main className="relative z-10 mx-auto w-full min-w-0 max-w-7xl flex-1 px-4 py-6 sm:px-6 space-y-6">
         {/* Universal Financial Summary Headline (Shown on Dashboard) */}
         {activeTab === 'dashboard' && <NetWorthSummary />}
 
-        {/* Tab 1: Dashboard (Unified 3D Scene or 2D Recharts) */}
+        {/* Tab 1: Dashboard */}
         {activeTab === 'dashboard' && (
           <div className="space-y-6">
-            {isWebGLSupported && !settings.prefer2D ? (
-              <FinanceScene
-                onSelectCategory={handleSelectCategory}
-                onSelectFund={handleSelectFund}
-                onSelectInvestment={handleSelectInvestment}
-                onWebGLFailed={() => setIsWebGLSupported(false)}
-              />
-            ) : (
-              <Dashboard2D
-                onSelectCategory={handleSelectCategory}
-                onSelectFund={handleSelectFund}
-                onSelectInvestment={handleSelectInvestment}
-                onSelectMonthFilter={handleSelectMonthFilter}
-              />
-            )}
+            <Dashboard2D
+              onSelectCategory={handleSelectCategory}
+              onSelectFund={handleSelectFund}
+              onSelectInvestment={handleSelectInvestment}
+              onSelectMonthFilter={handleSelectMonthFilter}
+              onNavigateTab={setActiveTab}
+            />
           </div>
         )}
 

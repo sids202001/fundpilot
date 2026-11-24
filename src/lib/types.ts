@@ -11,6 +11,11 @@ export interface ExpenseItem {
   amountCents: number;
 }
 
+export interface ExpenseSplit {
+  category: string;
+  amountCents: number;
+}
+
 export interface Expense {
   id: string;
   amountCents: number; // Smallest integer unit in specified currency
@@ -20,13 +25,65 @@ export interface Expense {
   date: string; // YYYY-MM-DD local date
   source: TransactionSource;
   accountId?: string; // Attached account ID
-  entryType: 'debit' | 'credit'; // 'debit' = money out (spending), 'credit' = money in (inflow)
+  entryType: 'debit' | 'credit'; // 'debit' = money out (spending), 'credit' = money in (inflow/refund)
+  balanceApplied?: boolean; // True for new entries that auto-updated account balance; old entries remain untouched
+  splits?: ExpenseSplit[]; // Optional category splits that sum to amountCents
+  recurringId?: string; // Set if auto-posted from a RecurringExpense
   confidence: number; // 0.0 - 1.0
   notes?: string;
   isSubscription?: boolean;
   items?: ExpenseItem[];
   dedupKey?: string;
   createdAt: number;
+  updatedAt: number;
+  deviceId?: string;
+}
+
+export interface RecurringExpense {
+  id: string;
+  name: string;
+  amountCents: number;
+  currency: string;
+  category: string;
+  dayOfMonth: number; // 1 - 31
+  accountId?: string;
+  active: boolean;
+  lastPostedMonth?: string; // YYYY-MM
+  createdAt: number;
+  updatedAt: number;
+  deviceId?: string;
+}
+
+export interface DebtPayoffPlan {
+  id: string;
+  accountId: string; // Credit card account ID
+  aprBps: number; // Annual interest rate in basis points (e.g. 1999 = 19.99%)
+  monthlyPaymentCents: number;
+  active: boolean;
+  updatedAt: number;
+  deviceId?: string;
+}
+
+export interface BudgetTransfer {
+  id: string;
+  month: string; // YYYY-MM
+  fromCategory: string;
+  toCategory: string;
+  amountCents: number;
+  createdAt: number;
+  updatedAt: number;
+  deviceId?: string;
+}
+
+export interface NetWorthSnapshot {
+  id: string; // nw-YYYY-MM
+  month: string; // YYYY-MM
+  netWorthCents: number;
+  cashCents: number;
+  fundsCents: number;
+  investmentsCents: number;
+  creditOwedCents: number;
+  currency: string;
   updatedAt: number;
   deviceId?: string;
 }
@@ -172,6 +229,10 @@ export interface VaultRecord {
     | 'custom_category'
     | 'category_rule'
     | 'budget'
+    | 'recurring_expense'
+    | 'debt_plan'
+    | 'budget_transfer'
+    | 'net_worth_snapshot'
     | 'settings';
   iv: string; // Base64 IV
   ciphertext: string; // Base64 ciphertext

@@ -3,8 +3,8 @@ import './globals.css';
 import { StoreProvider } from '@/lib/store';
 
 export const metadata: Metadata = {
-  title: 'FundPilot — 3D Local-First Personal Finance Tracker',
-  description: 'Encrypted, local-first 3D personal finance command deck: Expenses, Sinking Funds & Portfolio Manager.',
+  title: 'FundPilot — Local-First Personal Finance Tracker',
+  description: 'Encrypted, local-first personal finance command deck: Expenses, Sinking Funds & Portfolio Manager.',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,

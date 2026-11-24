@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
+import { TiltCard } from '@/components/3d-ui/TiltCard';
+import { MagneticButton } from '@/components/3d-ui/MagneticButton';
 import { useStore, formatDisplayDate } from '@/lib/store';
 import { InvestmentEntry, InvestmentType } from '@/lib/types';
 import { CURRENCY_REGISTRY, formatMoney, parseToSmallestUnit, fromSmallestUnit } from '@/lib/currencies';
@@ -101,19 +103,19 @@ export function InvestmentsModule({ selectedId }: { selectedId?: string | null }
     <div className="space-y-6">
       {/* Top Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <div className="flex items-center gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-xl font-bold tracking-tight text-[#f5f3ef]">Investments</h2>
             <span className="rounded-full bg-gold/10 px-2 py-0.5 text-[10px] font-medium text-gold-light border border-gold/30">
               Manual Totals Only
             </span>
           </div>
-          <p className="mt-1 text-xs text-[#9e9a93]">
+          <p className="mt-1 text-xs leading-relaxed text-[#c2bdb4] whitespace-normal">
             Update amounts by hand when you check your external portfolio. Zero tracking, zero prices, zero growth claims.
           </p>
         </div>
 
-        <button
+        <MagneticButton
           onClick={() => {
             setFormLabel('');
             setFormAmount('');
@@ -121,26 +123,26 @@ export function InvestmentsModule({ selectedId }: { selectedId?: string | null }
             setFormCurrency(displayCurrency || 'USD');
             setIsAddModalOpen(true);
           }}
-          className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-gold to-gold-light px-4 py-2 text-xs font-semibold text-[#0b0d10] shadow-[0_0_15px_rgba(212,175,55,0.25)] hover:brightness-110 transition-all"
+          className="flex shrink-0 items-center gap-1.5 rounded-xl bg-gradient-to-r from-gold to-gold-light px-4 py-2 text-xs font-semibold text-[#0b0d10] shadow-[0_0_15px_rgba(212,175,55,0.25)] hover:brightness-110 transition-all"
         >
           <Plus className="h-4 w-4" />
           <span>Add Investment</span>
-        </button>
+        </MagneticButton>
       </div>
 
       {/* Primary KPI Card: Total Portfolio Value */}
-      <div className="rounded-2xl border border-[#1e222b] bg-[#111419]/90 p-6 backdrop-blur-md">
+      <TiltCard maxTilt={3.5} className="card-3d relative overflow-hidden rounded-2xl p-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <span className="text-xs font-semibold uppercase tracking-wider text-gold">Total Investments</span>
-            <div className="mt-2 text-3xl font-extrabold tracking-tight text-[#f5f3ef]">
+          <div className="min-w-0">
+            <span className="tilt-z-sm text-xs font-semibold uppercase tracking-wider text-gold">Total Investments</span>
+            <div className="tilt-z-lg mt-2 text-3xl font-extrabold tracking-tight text-[#f5f3ef]">
               {displayMoney(totalInvestmentsCents, displayCurrency)}
             </div>
-            <p className="mt-2 text-[11px] text-[#9e9a93]">
-              Sum of all manual asset balances • Converted to {displayCurrency} using verified exchange rates
+            <p className="tilt-z-sm mt-2 text-xs text-[#c2bdb4]">
+              {`Sum of all manual asset balances • Converted to ${displayCurrency || 'USD'} using verified exchange rates`}
             </p>
           </div>
-          <div className="rounded-xl border border-[#262930] bg-[#0b0d10]/80 p-3 text-xs text-[#9e9a93] space-y-1">
+          <div className="tilt-z-md well-3d rounded-xl p-3 text-xs text-[#c2bdb4] space-y-1">
             <div className="flex items-center justify-between gap-4">
               <span>Total Entries:</span>
               <strong className="text-[#f5f3ef]">{investments.length}</strong>
@@ -151,10 +153,10 @@ export function InvestmentsModule({ selectedId }: { selectedId?: string | null }
             </div>
           </div>
         </div>
-      </div>
+      </TiltCard>
 
       {/* Investments List */}
-      <div className="rounded-2xl border border-[#1e222b] bg-[#111419]/80 p-5 backdrop-blur-md">
+      <div className="surface-3d rounded-2xl p-5">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-[#f5f3ef]">Investment Holdings</h3>
           <span className="text-xs text-[#9e9a93]">{investments.length} Active Records</span>
@@ -215,12 +217,28 @@ export function InvestmentsModule({ selectedId }: { selectedId?: string | null }
             ))}
           </div>
         ) : (
-          <div className="py-12 text-center text-xs text-[#9e9a93]">
-            <TrendingUp className="mx-auto h-8 w-8 text-[#262930] mb-2" />
-            <p>No investment entries added yet.</p>
-            <p className="mt-1 text-[11px] text-[#716c64]">
-              Click &quot;Add Investment&quot; to enter your portfolio balances by hand.
+          <div className="well-3d flex flex-col items-center justify-center rounded-xl py-14 px-6 text-center">
+            <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-gold/30 bg-gold/10 text-gold-light">
+              <TrendingUp className="h-6 w-6" />
+            </div>
+            <p className="text-sm font-semibold text-[#f5f3ef]">No investments added yet</p>
+            <p className="mt-1 max-w-sm text-xs text-[#c2bdb4]">
+              Enter your brokerage, 401(k), ETF, or crypto totals by hand to include them in your Net Worth.
             </p>
+            <MagneticButton
+              type="button"
+              onClick={() => {
+                setFormLabel('');
+                setFormAmount('');
+                setFormType('Stocks');
+                setFormCurrency(displayCurrency || 'USD');
+                setIsAddModalOpen(true);
+              }}
+              className="mt-5 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-gold to-gold-light px-5 py-2.5 text-xs font-semibold text-[#0b0d10] shadow-[0_0_20px_rgba(212,175,55,0.25)] hover:brightness-110 transition-all"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Add Your First Investment</span>
+            </MagneticButton>
           </div>
         )}
       </div>

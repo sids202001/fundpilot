@@ -2,8 +2,11 @@
 
 import React, { useState } from 'react';
 import { useStore, getLocalDate, getLocalMonth } from '@/lib/store';
-import { formatMoney } from '@/lib/currencies';
+import { formatMoney, getCurrencySymbol } from '@/lib/currencies';
 import { ArrowUpRight, ArrowDownRight, Edit3, Check, Calculator, AlertTriangle } from 'lucide-react';
+import { SpatialDepthCard } from '@/components/3d-ui/SpatialDepthCard';
+import { TiltCard } from '@/components/3d-ui/TiltCard';
+import { RisingInk } from '@/components/3d-ui/RisingInk';
 
 export function NetWorthSummary() {
   const {
@@ -89,10 +92,13 @@ export function NetWorthSummary() {
     <div className="space-y-4">
       {/* Primary KPI Cards — Warm Charcoal + Champagne Gold Hierarchy */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {/* Total Net Worth Card */}
-        <div className="relative overflow-hidden rounded-2xl border border-[#1e222b] bg-[#111419]/80 p-6 shadow-xl backdrop-blur-md transition-all duration-300 hover:border-[#d4af37]/40">
+        {/* Total Net Worth Hero Card — 4-Layer Spatial Depth Card */}
+        <SpatialDepthCard watermark={getCurrencySymbol(displayCurrency || 'USD')}>
           <div className="flex items-center justify-between text-xs text-[#9e9a93]">
-            <span className="font-semibold uppercase tracking-wider text-[#d4af37]">Total Net Worth</span>
+            <RisingInk
+              text="TOTAL NET WORTH"
+              className="font-semibold uppercase tracking-wider text-[#d4af37]"
+            />
             <button
               onClick={() => {
                 setBankCashInput(((primaryBank?.balanceCents ?? settings.bankCashCents ?? 0) / 100).toString());
@@ -108,7 +114,7 @@ export function NetWorthSummary() {
             </button>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-3xl font-extrabold tracking-tight text-[#f5f3ef]">
+            <span className="text-3xl font-extrabold tracking-tight text-[#f3d99b] drop-shadow-[0_2px_12px_rgba(212,175,55,0.28)]">
               {displayMoney(totalNetWorthCents, displayCurrency || 'USD')}
             </span>
             {netWorthUnconverted.length > 0 && (
@@ -120,7 +126,7 @@ export function NetWorthSummary() {
               </span>
             )}
           </div>
-          <div className="mt-4 flex flex-wrap items-center gap-1.5 text-[11px] text-[#9e9a93]">
+          <div className="mt-4 flex flex-wrap items-center gap-1.5 text-[11px] text-[#c2bdb4]">
             <span>Cash: <strong className="text-[#e5c07b]">{displayMoney(totalBankCashCents, displayCurrency || 'USD')}{bankCashUnconverted.length > 0 ? '*' : ''}</strong></span>
             <span className="text-[#3a3f4d]">•</span>
             <span>Funds: <strong className="text-[#d4af37]">{displayMoney(totalFundsCents, displayCurrency || 'USD')}{fundsUnconverted.length > 0 ? '*' : ''}</strong></span>
@@ -129,18 +135,17 @@ export function NetWorthSummary() {
             <span className="text-[#3a3f4d]">•</span>
             <span>Credit: <strong className="text-loss">{hideAmounts ? '' : '-'}{displayMoney(totalCreditOwedCents, displayCurrency || 'USD')}{creditOwedUnconverted.length > 0 ? '*' : ''}</strong></span>
           </div>
-          <div className="absolute right-0 top-0 h-1 w-full bg-gradient-to-r from-[#d4af37] via-[#f3d99b] to-[#b8860b]" />
-        </div>
+        </SpatialDepthCard>
 
         {/* Safe to Spend This Month Card */}
-        <div className="relative overflow-hidden rounded-2xl border border-[#1e222b] bg-[#111419]/80 p-6 shadow-xl backdrop-blur-md transition-all duration-300 hover:border-[#22c55e]/30">
-          <div className="flex items-center justify-between text-xs text-[#9e9a93]">
+        <TiltCard className="card-3d relative overflow-hidden rounded-2xl p-6 hover:!border-[#22c55e]/40">
+          <div className="tilt-z-sm flex items-center justify-between text-xs text-[#9e9a93]">
             <span className="font-semibold uppercase tracking-wider text-[#f5f3ef]">Safe to Spend</span>
             <span className="rounded-full bg-[#22c55e]/10 px-2 py-0.5 text-[10px] font-medium text-[#4ade80] border border-[#22c55e]/25">
               Discretionary
             </span>
           </div>
-          <div className="mt-3 flex items-baseline gap-2">
+          <div className="tilt-z-lg mt-3 flex items-baseline gap-2">
             <span className="text-3xl font-extrabold tracking-tight text-[#4ade80]">
               {displayMoney(safeToSpendMonthCents, displayCurrency || 'USD')}
             </span>
@@ -153,49 +158,49 @@ export function NetWorthSummary() {
               </span>
             )}
           </div>
-          <p className="mt-4 text-[11px] text-[#9e9a93]">
+          <p className="tilt-z-sm mt-4 text-[11px] text-[#c2bdb4]">
             {safeToSpendUnconverted.length > 0
               ? `* Partial: rates unavailable for ${safeToSpendUnconverted.join(', ')}`
               : 'Income − Fixed bills − Sinking deposits − Debit spent'}
           </p>
           <div className="absolute right-0 top-0 h-1 w-full bg-[#22c55e]" />
-        </div>
+        </TiltCard>
 
         {/* Monthly Cash Flow Card */}
-        <div className="relative overflow-hidden rounded-2xl border border-[#1e222b] bg-[#111419]/80 p-6 shadow-xl backdrop-blur-md transition-all duration-300 hover:border-[#d4af37]/30">
-          <div className="flex items-center justify-between text-xs text-[#9e9a93]">
+        <TiltCard className="card-3d relative overflow-hidden rounded-2xl p-6">
+          <div className="tilt-z-sm flex items-center justify-between text-xs text-[#9e9a93]">
             <span className="font-semibold uppercase tracking-wider text-[#f5f3ef]">Monthly Cash Flow</span>
             <div className="flex items-center gap-1 rounded-full bg-[#22c55e]/10 px-2 py-0.5 text-[10px] font-medium text-[#4ade80] border border-[#22c55e]/25">
               <ArrowUpRight className="h-3 w-3" />
               <span>{displayPercent(savingsRatePct)} Saved</span>
             </div>
           </div>
-          <div className="mt-3 text-3xl font-extrabold tracking-tight text-[#f5f3ef]">
+          <div className="tilt-z-lg mt-3 text-3xl font-extrabold tracking-tight text-[#f5f3ef]">
             {displayMoney(netSavedMonthCents, displayCurrency || 'USD')}
           </div>
-          <div className="mt-4 flex items-center justify-between text-[11px] text-[#9e9a93]">
+          <div className="tilt-z-sm mt-4 flex items-center justify-between text-[11px] text-[#c2bdb4]">
             <span>Inflows: {displayMoney(totalMonthlyInflowsCents, displayCurrency || 'USD')}</span>
             <span>Outflows: {displayMoney(totalMonthlyOutflowCents, displayCurrency || 'USD')}</span>
           </div>
           <div className="absolute right-0 top-0 h-1 w-full bg-[#d4af37]" />
-        </div>
+        </TiltCard>
 
         {/* Sinking Funds Total Card */}
-        <div className="relative overflow-hidden rounded-2xl border border-[#1e222b] bg-[#111419]/80 p-6 shadow-xl backdrop-blur-md transition-all duration-300 hover:border-[#d4af37]/40">
-          <div className="flex items-center justify-between text-xs text-[#9e9a93]">
+        <TiltCard className="card-3d relative overflow-hidden rounded-2xl p-6">
+          <div className="tilt-z-sm flex items-center justify-between text-xs text-[#9e9a93]">
             <span className="font-semibold uppercase tracking-wider text-[#d4af37]">Sinking Funds Total</span>
             <span className="rounded-full bg-[#d4af37]/10 px-2 py-0.5 text-[10px] font-medium text-[#f3d99b] border border-[#d4af37]/25">
               Money with a Job
             </span>
           </div>
-          <div className="mt-3 text-3xl font-extrabold tracking-tight text-[#f3d99b]">
+          <div className="tilt-z-lg mt-3 text-3xl font-extrabold tracking-tight text-[#f3d99b]">
             {displayMoney(totalFundsCents, displayCurrency || 'USD')}
           </div>
-          <p className="mt-4 text-[11px] text-[#9e9a93]">
+          <p className="tilt-z-sm mt-4 text-[11px] text-[#c2bdb4]">
             Segregated from spendable cash across all sinking funds
           </p>
           <div className="absolute right-0 top-0 h-1 w-full bg-[#d4af37]" />
-        </div>
+        </TiltCard>
       </div>
 
       {/* Honest Multi-Currency Partial Marker Banner (Item 4) */}
@@ -210,7 +215,7 @@ export function NetWorthSummary() {
       )}
 
       {/* 4-Bucket Exact Mathematical Reconciliation Strip */}
-      <div className="rounded-xl border border-[#1e222b] bg-[#111419]/90 px-4 py-2.5 backdrop-blur-sm text-[11px] text-[#9e9a93] flex flex-wrap items-center justify-between gap-3">
+      <div className="surface-3d rounded-xl px-4 py-2.5 text-[11px] text-[#c2bdb4] flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Calculator className="h-3.5 w-3.5 text-[#d4af37]" />
           <span className="font-semibold text-[#f5f3ef]">Net Worth Formula:</span>
@@ -222,7 +227,7 @@ export function NetWorthSummary() {
             <strong className="text-[#f5f3ef]">{displayMoney(totalNetWorthCents, displayCurrency || 'USD')}</strong>
           </span>
         </div>
-        <span className="text-[10px] text-[#716c64] font-mono">
+        <span className="text-[10px] text-[#a9a49b] font-mono">
           Integer-Cent Accuracy Guaranteed
         </span>
       </div>
